@@ -13,7 +13,7 @@ variable "environment" {
 variable "project_name" {
   description = "Project name for resource tagging"
   type        = string
-  default     = "Project_05"
+  default     = "Project"
 }
 
 # VPC Configuration
