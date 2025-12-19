@@ -148,3 +148,51 @@ output "alb_url" {
   description = "URL to access the application via ALB"
   value       = "http://${aws_lb.main.dns_name}"
 }
+
+# S3 Outputs
+output "s3_static_assets_bucket_name" {
+  description = "S3 bucket name for static assets"
+  value       = aws_s3_bucket.static_assets.id
+}
+
+output "s3_static_assets_bucket_arn" {
+  description = "S3 bucket ARN for static assets"
+  value       = aws_s3_bucket.static_assets.arn
+}
+
+output "s3_cloudfront_logs_bucket_name" {
+  description = "S3 bucket name for CloudFront logs"
+  value       = aws_s3_bucket.cloudfront_logs.id
+}
+
+# WAF Outputs
+output "waf_web_acl_id" {
+  description = "WAF Web ACL ID"
+  value       = aws_wafv2_web_acl.main.id
+}
+
+output "waf_web_acl_arn" {
+  description = "WAF Web ACL ARN"
+  value       = aws_wafv2_web_acl.main.arn
+}
+
+# CloudFront Outputs
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID"
+  value       = aws_cloudfront_distribution.main.id
+}
+
+output "cloudfront_distribution_arn" {
+  description = "CloudFront distribution ARN"
+  value       = aws_cloudfront_distribution.main.arn
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name"
+  value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "cloudfront_url" {
+  description = "URL to access the application via CloudFront"
+  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+}
