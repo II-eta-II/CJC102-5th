@@ -1,0 +1,16 @@
+# AWS Configuration
+aws_region = "ap-northeast-1"
+
+# Environment Configuration
+environment = "dev"
+
+# Project Configuration
+project_name = "usa"
+
+# RDS Database Configuration
+db_username = "admin"
+db_password = "ChangeMe123!"
+
+# WordPress Admin Configuration
+wp_username = "admin"
+wp_password = "YourSecurePassword123!"

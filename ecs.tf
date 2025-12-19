@@ -184,6 +184,14 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "WORDPRESS_DATABASE_PASSWORD"
           value = var.db_password
+        },
+        {
+          name  = "WORDPRESS_USERNAME"
+          value = var.wp_username
+        },
+        {
+          name  = "WORDPRESS_PASSWORD"
+          value = var.wp_password
         }
       ]
 
@@ -248,8 +256,7 @@ resource "aws_ecs_service" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.ecs_task_execution,
     aws_efs_mount_target.main,
-    aws_lb_listener.http,
-    aws_lb_listener.https
+    aws_lb_listener.http
   ]
 }
 

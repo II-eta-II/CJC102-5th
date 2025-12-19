@@ -133,7 +133,15 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
-variable "domain_name" {
-  description = "Domain name for the website"
+# WordPress Configuration
+variable "wp_username" {
+  description = "WordPress admin username"
   type        = string
+  default     = "admin"
+}
+
+variable "wp_password" {
+  description = "WordPress admin password"
+  type        = string
+  sensitive   = true
 }

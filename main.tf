@@ -6,14 +6,6 @@ terraform {
     }
   }
   required_version = ">= 1.0"
-
-  backend "s3" {
-    bucket         = "cjc102-5th-terraform-state-4zr7cthj"
-    key            = "terraform.tfstate"
-    region         = "ap-northeast-1"
-    encrypt        = true
-    dynamodb_table = "cjc102-5th-terraform-locks"
-  }
 }
 
 provider "aws" {

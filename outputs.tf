@@ -142,10 +142,7 @@ output "alb_target_group_arn" {
   value       = aws_lb_target_group.ecs.arn
 }
 
-output "name_servers" {
-  description = "Name servers for the Route 53 zone"
-  value       = aws_route53_zone.main.name_servers
-}
+
 
 output "alb_url" {
   description = "URL to access the application via ALB"
