@@ -1,0 +1,29 @@
+# variable.tf 的參數都可以重新定義
+# 像是子網域名稱不能重複
+# 以及需要在同一個帳號下架設 2個機房的話以 project_name 區分
+
+# 請改為你的 AWS SSO profile 名稱，例如 "sso-profile" 或 "default"
+# aws_profile = "default" 
+
+# 為自己的專案命名 ( 更改前綴字樣 )
+# project_name = "usa"
+
+# Entry point url
+# 預設為 4碼亂數英文避免重複
+# Eta 提供 cjc102.site，組合起來是"your-subdomain.cjc102.site"
+# subdomain = "your-subdomain"
+
+# Route53 Configuration
+# Eta 提供的 Route53 Host Zone (cjc102.site)，若想用自己的要更改 ID
+# route53_zone_id = "Z01780191CLMBHU6Y6729"
+
+# CloudFront Configuration (可選，有預設值)
+# cloudfront_price_class = "PriceClass_All"  # PriceClass_100, PriceClass_200, PriceClass_All
+# cloudfront_default_ttl = 86400  # 預設快取時間（秒），預設 24 小時
+# cloudfront_max_ttl = 31536000  # 最大快取時間（秒），預設 1 年
+# cloudfront_static_ttl = 31536000  # 靜態資源快取時間（秒），預設 1 年
+# cloudfront_log_retention_days = 30  # CloudFront 日誌保留天數
+
+# WAF Configuration (可選，有預設值)
+# waf_rate_limit = 2000  # WAF 速率限制（每 5 分鐘每個 IP 的請求數）
+# waf_log_retention_days = 30  # WAF 日誌保留天數

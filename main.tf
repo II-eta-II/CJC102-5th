@@ -4,8 +4,25 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
   required_version = ">= 1.0"
+
+  # Local backend - store tfstate in ./backend/
+  backend "local" {
+    path = "./backend/terraform.tfstate"
+  }
+}
+
+# Random 4-char subdomain generator
+resource "random_string" "subdomain" {
+  length  = 4
+  special = false
+  upper   = false
+  numeric = false
 }
 
 provider "aws" {
@@ -20,9 +37,8 @@ provider "aws" {
   # 使用變數設定預設標籤
   default_tags {
     tags = {
-      Environment = var.environment
-      ManagedBy   = "Terraform"
-      Project     = var.project_name
+      ManagedBy = "Terraform"
+      Project   = var.project_name
     }
   }
 }
@@ -35,9 +51,8 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Environment = var.environment
-      ManagedBy   = "Terraform"
-      Project     = var.project_name
+      ManagedBy = "Terraform"
+      Project   = var.project_name
     }
   }
 }
@@ -55,7 +70,6 @@ module "wordpress" {
   # Core Configuration
   aws_region   = var.aws_region
   aws_profile  = var.aws_profile
-  environment  = var.environment
   project_name = var.project_name
 
   # VPC Configuration
@@ -97,5 +111,9 @@ module "wordpress" {
   # WAF Configuration
   waf_rate_limit         = var.waf_rate_limit
   waf_log_retention_days = var.waf_log_retention_days
+
+  # Route53 Configuration
+  route53_zone_id = var.route53_zone_id
+  subdomain       = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
 }
 

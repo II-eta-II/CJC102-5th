@@ -80,7 +80,6 @@ resource "aws_db_instance" "main" {
   parameter_group_name = "default.mysql8.0"
 
   tags = {
-    Name        = "${var.project_name}-wordpress-db"
-    Environment = var.environment
+    Name = "${var.project_name}-wordpress-db"
   }
 }

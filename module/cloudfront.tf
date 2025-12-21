@@ -7,6 +7,9 @@ resource "aws_cloudfront_distribution" "main" {
   price_class         = var.cloudfront_price_class
   web_acl_id          = aws_wafv2_web_acl.main.arn
 
+  # Custom domain aliases
+  aliases = ["${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"]
+
   # ALB 作為來源（OAC 只能用於 S3，ALB 不需要）
   origin {
     domain_name = aws_lb.main.dns_name
@@ -15,7 +18,7 @@ resource "aws_cloudfront_distribution" "main" {
     custom_origin_config {
       http_port                = 80
       https_port               = 443
-      origin_protocol_policy   = "http-only"
+      origin_protocol_policy   = "https-only"
       origin_ssl_protocols     = ["TLSv1.2"]
       origin_read_timeout      = 60
       origin_keepalive_timeout = 5
@@ -102,8 +105,11 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
+  # Use ACM certificate from us-east-1 for custom domain
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn      = aws_acm_certificate_validation.cloudfront.certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   tags = {

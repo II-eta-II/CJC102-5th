@@ -10,16 +10,10 @@ variable "aws_profile" {
   default     = "default"
 }
 
-variable "environment" {
-  description = "Environment name"
-  type        = string
-  default     = "dev"
-}
-
 variable "project_name" {
   description = "Project name for resource tagging"
   type        = string
-  default     = "Project"
+  default     = "usa"
 }
 
 # VPC Configuration
@@ -195,3 +189,19 @@ variable "waf_log_retention_days" {
   type        = number
   default     = 30
 }
+
+# Route53 Configuration
+variable "route53_zone_id" {
+  description = "Route53 Hosted Zone ID for ACM certificate DNS validation"
+  type        = string
+  default     = "Z01780191CLMBHU6Y6729"
+}
+
+variable "subdomain" {
+  description = "Subdomain name for the application entry point (e.g., 'app' will create app.yourdomain.com). Leave empty for random 4-char subdomain."
+  type        = string
+  default     = ""
+}
+
+
+

@@ -1,10 +1,10 @@
 # S3 Bucket for Static Assets
 resource "aws_s3_bucket" "static_assets" {
-  bucket = "${var.project_name}-static-assets-${var.environment}"
+  bucket        = "${var.project_name}-static-assets-${var.subdomain}"
+  force_destroy = true
 
   tags = {
-    Name        = "${var.project_name}-static-assets"
-    Environment = var.environment
+    Name = "${var.project_name}-static-assets"
   }
 }
 
@@ -40,23 +40,23 @@ resource "aws_s3_bucket_public_access_block" "static_assets" {
 
 # S3 Bucket for CloudFront Access Logs
 resource "aws_s3_bucket" "cloudfront_logs" {
-  bucket = "${var.project_name}-cloudfront-logs-${var.environment}"
+  bucket        = "${var.project_name}-cloudfront-logs-${var.subdomain}"
+  force_destroy = true
 
   tags = {
-    Name        = "${var.project_name}-cloudfront-logs"
-    Environment = var.environment
+    Name = "${var.project_name}-cloudfront-logs"
   }
 }
 
 # S3 Bucket for WAF Logs
 # 注意：AWS WAF 要求 S3 Bucket 名稱必須以 aws-waf-logs- 開頭
 resource "aws_s3_bucket" "waf_logs" {
-  provider = aws.us_east_1
-  bucket   = "aws-waf-logs-${var.project_name}-${var.environment}"
+  provider      = aws.us_east_1
+  bucket        = "aws-waf-logs-${var.project_name}-${var.subdomain}"
+  force_destroy = true
 
   tags = {
-    Name        = "aws-waf-logs-${var.project_name}"
-    Environment = var.environment
+    Name = "aws-waf-logs-${var.project_name}"
   }
 }
 
@@ -180,9 +180,9 @@ resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
 resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
   bucket = aws_s3_bucket.cloudfront_logs.id
 
-  block_public_acls       = false  # CloudFront 需要 ACL 訪問
+  block_public_acls       = false # CloudFront 需要 ACL 訪問
   block_public_policy     = true
-  ignore_public_acls      = false  # 需要允許 ACL
+  ignore_public_acls      = false # 需要允許 ACL
   restrict_public_buckets = true
 }
 
