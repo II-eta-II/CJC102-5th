@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "aws_profile" {
   description = "AWS profile name for SSO or credentials (leave empty to use default)"
   type        = string
-  default     = "default"
+  default     = ""
 }
 
 variable "environment" {
