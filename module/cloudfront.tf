@@ -8,9 +8,9 @@ resource "aws_cloudfront_distribution" "main" {
   web_acl_id          = aws_wafv2_web_acl.main.arn
 
   # Custom domain aliases
-  aliases = ["${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"]
+  aliases = ["${var.subdomain}.${local.route53_domain_name}"]
 
-  # ALB 作為來源（OAC 只能用於 S3，ALB 不需要）
+  # ALB 作為來�?（OAC ?�能?�於 S3，ALB 不�?要�?
   origin {
     domain_name = aws_lb.main.dns_name
     origin_id   = "ALB-${var.project_name}"
@@ -30,14 +30,14 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
-  # 可選：S3 作為靜態資源來源
+  # ?�選：S3 作為?��?資�?來�?
   origin {
     domain_name              = aws_s3_bucket.static_assets.bucket_regional_domain_name
     origin_id                = "S3-${var.project_name}-static"
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
 
-  # 預設快取行為（指向 ALB）
+  # ?�設快�?行為（�???ALB�?
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -58,7 +58,7 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl                = var.cloudfront_max_ttl
   }
 
-  # 靜態資源快取行為（指向 S3）
+  # ?��?資�?快�?行為（�???S3�?
   ordered_cache_behavior {
     path_pattern     = "/static/*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
@@ -79,7 +79,7 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl                = var.cloudfront_static_ttl
   }
 
-  # 自訂錯誤頁面
+  # ?��??�誤?�面
   custom_error_response {
     error_code         = 403
     response_code      = 403
@@ -92,7 +92,7 @@ resource "aws_cloudfront_distribution" "main" {
     response_page_path = "/error.html"
   }
 
-  # 日誌設定
+  # ?��?設�?
   logging_config {
     bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
     include_cookies = false
@@ -151,7 +151,7 @@ resource "aws_s3_bucket_policy" "static_assets" {
   })
 }
 
-# 注意：CloudFront 會通過公網訪問 ALB
-# ALB 的 security group 已經允許來自網際網路的 HTTP/HTTPS 流量
-# 如果需要更嚴格的安全控制，可以考慮使用 AWS WAF 來限制來源 IP
+# 注�?：CloudFront ?�通�??�網訪�? ALB
+# ALB ??security group 已�??�許來自網�?網路??HTTP/HTTPS 流�?
+# 如�??�要更?�格?��??�控?��??�以?�慮使用 AWS WAF 來�??��?�?IP
 

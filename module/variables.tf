@@ -196,6 +196,11 @@ variable "route53_zone_id" {
   type        = string
 }
 
+variable "route53_domain_name" {
+  description = "Domain name of the Route53 Hosted Zone (e.g., 'cjc102.site'). Required because cross-account role lacks ListHostedZones permission."
+  type        = string
+}
+
 variable "subdomain" {
   description = "Subdomain name for the application entry point (e.g., 'app' will create app.yourdomain.com)"
   type        = string

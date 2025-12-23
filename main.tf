@@ -57,6 +57,27 @@ provider "aws" {
   }
 }
 
+# Provider for Route53 (使用跨帳戶授權的 role 來管理 Route53 記錄)
+# 此 role 由其他帳戶授權，允許對 hosted zone 進行新增和修改
+provider "aws" {
+  alias   = "route53"
+  region  = "ap-northeast-1"
+  profile = var.aws_profile != "" ? var.aws_profile : null
+
+  assume_role {
+    role_arn     = "arn:aws:iam::459063348692:role/cjc102-route53-record-manager"
+    session_name = "terraform-route53"
+    external_id  = "cjc102-route53-record-manager"
+  }
+
+  default_tags {
+    tags = {
+      ManagedBy = "Terraform"
+      Project   = var.project_name
+    }
+  }
+}
+
 # WordPress Infrastructure Module
 module "wordpress" {
   source = "./module"
@@ -65,6 +86,7 @@ module "wordpress" {
   providers = {
     aws           = aws
     aws.us_east_1 = aws.us_east_1
+    aws.route53   = aws.route53
   }
 
   # Core Configuration
@@ -113,7 +135,8 @@ module "wordpress" {
   waf_log_retention_days = var.waf_log_retention_days
 
   # Route53 Configuration
-  route53_zone_id = var.route53_zone_id
-  subdomain       = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
+  route53_zone_id     = var.route53_zone_id
+  route53_domain_name = var.route53_domain_name
+  subdomain           = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
 }
 

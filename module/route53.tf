@@ -1,17 +1,19 @@
 # Route53 and ACM Configuration for HTTPS
 
-# Data source for existing Route53 Hosted Zone
-data "aws_route53_zone" "main" {
-  zone_id = var.route53_zone_id
+# 使用 locals 來存放 Route53 資訊，避免使用需要 ListHostedZones 權限的 data source
+# 跨帳戶 role 只有 ListResourceRecordSets 和 ChangeResourceRecordSets 權限
+locals {
+  route53_zone_id     = var.route53_zone_id
+  route53_domain_name = var.route53_domain_name
 }
 
 # ACM Certificate
 resource "aws_acm_certificate" "main" {
-  domain_name       = data.aws_route53_zone.main.name
+  domain_name       = local.route53_domain_name
   validation_method = "DNS"
 
   subject_alternative_names = [
-    "*.${data.aws_route53_zone.main.name}"
+    "*.${local.route53_domain_name}"
   ]
 
   lifecycle {
@@ -25,6 +27,8 @@ resource "aws_acm_certificate" "main" {
 
 # DNS Validation Records
 resource "aws_route53_record" "acm_validation" {
+  provider = aws.route53
+
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
@@ -38,7 +42,7 @@ resource "aws_route53_record" "acm_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = local.route53_zone_id
 }
 
 # ACM Certificate Validation
@@ -48,17 +52,20 @@ resource "aws_acm_certificate_validation" "main" {
 }
 
 # Route53 A Record pointing to ALB (for root domain)
-resource "aws_route53_record" "alb" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = data.aws_route53_zone.main.name
-  type    = "A"
-
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
-}
+# 已移除：不建立或修改 root domain (cjc102.site) 的 A 記錄
+# 因為 root domain 可能被其他人使用，我們只使用 subdomain
+# resource "aws_route53_record" "alb" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = local.route53_domain_name
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
 
 # ========================================
 # CloudFront ACM Certificate (us-east-1)
@@ -68,7 +75,7 @@ resource "aws_route53_record" "alb" {
 # ACM Certificate for CloudFront (must be in us-east-1)
 resource "aws_acm_certificate" "cloudfront" {
   provider          = aws.us_east_1
-  domain_name       = "${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"
+  domain_name       = "${var.subdomain}.${local.route53_domain_name}"
   validation_method = "DNS"
 
   lifecycle {
@@ -82,12 +89,13 @@ resource "aws_acm_certificate" "cloudfront" {
 
 # DNS Validation Record for CloudFront ACM (single domain)
 resource "aws_route53_record" "cloudfront_acm_validation" {
+  provider        = aws.route53
   allow_overwrite = true
   name            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_name
   records         = [tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_value]
   ttl             = 60
   type            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_type
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = local.route53_zone_id
 }
 
 # CloudFront ACM Certificate Validation
@@ -99,11 +107,12 @@ resource "aws_acm_certificate_validation" "cloudfront" {
 
 # Route53 CNAME Record for subdomain -> CloudFront
 resource "aws_route53_record" "entry_point" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = "${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [aws_cloudfront_distribution.main.domain_name]
+  provider = aws.route53
+  zone_id  = local.route53_zone_id
+  name     = "${var.subdomain}.${local.route53_domain_name}"
+  type     = "CNAME"
+  ttl      = 300
+  records  = [aws_cloudfront_distribution.main.domain_name]
 }
 
 
