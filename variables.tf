@@ -197,6 +197,12 @@ variable "route53_zone_id" {
   default     = "Z01780191CLMBHU6Y6729"
 }
 
+variable "route53_domain_name" {
+  description = "Domain name of the Route53 Hosted Zone (e.g., 'cjc102.site'). Required because cross-account role lacks ListHostedZones permission."
+  type        = string
+  default     = "cjc102.site"
+}
+
 variable "subdomain" {
   description = "Subdomain name for the application entry point (e.g., 'app' will create app.yourdomain.com). Leave empty for random 4-char subdomain."
   type        = string

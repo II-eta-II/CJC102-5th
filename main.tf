@@ -135,7 +135,8 @@ module "wordpress" {
   waf_log_retention_days = var.waf_log_retention_days
 
   # Route53 Configuration
-  route53_zone_id = var.route53_zone_id
-  subdomain       = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
+  route53_zone_id     = var.route53_zone_id
+  route53_domain_name = var.route53_domain_name
+  subdomain           = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
 }
 
