@@ -52,18 +52,20 @@ resource "aws_acm_certificate_validation" "main" {
 }
 
 # Route53 A Record pointing to ALB (for root domain)
-resource "aws_route53_record" "alb" {
-  provider = aws.route53
-  zone_id  = local.route53_zone_id
-  name     = local.route53_domain_name
-  type     = "A"
-
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
-}
+# 已移除：不建立或修改 root domain (cjc102.site) 的 A 記錄
+# 因為 root domain 可能被其他人使用，我們只使用 subdomain
+# resource "aws_route53_record" "alb" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = local.route53_domain_name
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
 
 # ========================================
 # CloudFront ACM Certificate (us-east-1)
