@@ -1,8 +1,10 @@
 # Route53 and ACM Configuration for HTTPS
 
 # Data source for existing Route53 Hosted Zone
+# 使用跨帳戶授權的 provider 來存取 Route53 hosted zone
 data "aws_route53_zone" "main" {
-  zone_id = var.route53_zone_id
+  provider = aws.route53
+  zone_id  = var.route53_zone_id
 }
 
 # ACM Certificate
@@ -25,6 +27,8 @@ resource "aws_acm_certificate" "main" {
 
 # DNS Validation Records
 resource "aws_route53_record" "acm_validation" {
+  provider = aws.route53
+
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
@@ -49,9 +53,10 @@ resource "aws_acm_certificate_validation" "main" {
 
 # Route53 A Record pointing to ALB (for root domain)
 resource "aws_route53_record" "alb" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = data.aws_route53_zone.main.name
-  type    = "A"
+  provider = aws.route53
+  zone_id  = data.aws_route53_zone.main.zone_id
+  name     = data.aws_route53_zone.main.name
+  type     = "A"
 
   alias {
     name                   = aws_lb.main.dns_name
@@ -82,6 +87,7 @@ resource "aws_acm_certificate" "cloudfront" {
 
 # DNS Validation Record for CloudFront ACM (single domain)
 resource "aws_route53_record" "cloudfront_acm_validation" {
+  provider        = aws.route53
   allow_overwrite = true
   name            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_name
   records         = [tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_value]
@@ -99,11 +105,12 @@ resource "aws_acm_certificate_validation" "cloudfront" {
 
 # Route53 CNAME Record for subdomain -> CloudFront
 resource "aws_route53_record" "entry_point" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = "${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [aws_cloudfront_distribution.main.domain_name]
+  provider = aws.route53
+  zone_id  = data.aws_route53_zone.main.zone_id
+  name     = "${var.subdomain}.${trimsuffix(data.aws_route53_zone.main.name, ".")}"
+  type     = "CNAME"
+  ttl      = 300
+  records  = [aws_cloudfront_distribution.main.domain_name]
 }
 
 
