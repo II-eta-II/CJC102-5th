@@ -22,6 +22,22 @@ User → CloudFront (HTTPS) → ALB → ECS Fargate → RDS MySQL
 
 ## 快速開始
 
+### 0. Route53 跨帳戶設定（必要）
+
+本專案使用共享的 Route53 Hosted Zone (`cjc102.site`)，部署前需先完成跨帳戶權限設定：
+
+1. **設定 AWS CLI Profile** - 詳細步驟請參考 [.aws/README.md](.aws/README.md)
+2. **測試權限** - 確認可以存取 Route53 Hosted Zone
+
+```powershell
+# 測試是否能列出 DNS 記錄
+aws route53 list-resource-record-sets `
+  --hosted-zone-id Z01780191CLMBHU6Y6729 `
+  --profile cjc102.site
+```
+
+> ⚠️ **重要**：若未完成此設定，`terraform apply` 將會因權限不足而失敗。
+
 ### 1. 前置準備
 
 ```powershell
