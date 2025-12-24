@@ -16,6 +16,14 @@ variable "project_name" {
   default     = "usa"
 }
 
+variable "extra_tags" {
+  description = "Extra tags to apply to all resources (can be overridden in tfvars)"
+  type        = map(string)
+  default = {
+    project = "cjc102-usa"
+  }
+}
+
 # VPC Configuration
 variable "vpc_cidr" {
   description = "CIDR block for VPC"

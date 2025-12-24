@@ -84,3 +84,8 @@ output "waf_web_acl_arn" {
   description = "WAF Web ACL ARN"
   value       = module.wordpress.waf_web_acl_arn
 }
+
+output "s3_media_offload_bucket_name" {
+  description = "S3 bucket name for WordPress media offload"
+  value       = module.wordpress.s3_media_offload_bucket_name
+}

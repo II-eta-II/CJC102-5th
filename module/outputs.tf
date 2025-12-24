@@ -165,6 +165,16 @@ output "s3_cloudfront_logs_bucket_name" {
   value       = aws_s3_bucket.cloudfront_logs.id
 }
 
+output "s3_media_offload_bucket_name" {
+  description = "S3 bucket name for WordPress media offload"
+  value       = aws_s3_bucket.media_offload.id
+}
+
+output "s3_media_offload_bucket_arn" {
+  description = "S3 bucket ARN for WordPress media offload"
+  value       = aws_s3_bucket.media_offload.arn
+}
+
 # WAF Outputs
 output "waf_web_acl_id" {
   description = "WAF Web ACL ID"

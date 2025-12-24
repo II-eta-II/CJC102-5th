@@ -83,6 +83,32 @@ resource "aws_iam_role_policy" "ecs_task_efs" {
   })
 }
 
+# Policy for ECS Task to access S3 Media Offload bucket
+resource "aws_iam_role_policy" "ecs_task_s3_media" {
+  name = "${var.project_name}-ecs-task-s3-media-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          aws_s3_bucket.media_offload.arn,
+          "${aws_s3_bucket.media_offload.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
 # Security Group for ECS Tasks
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"

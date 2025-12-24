@@ -36,10 +36,13 @@ provider "aws" {
 
   # 使用變數設定預設標籤
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -50,10 +53,13 @@ provider "aws" {
   profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -71,10 +77,13 @@ provider "aws" {
   }
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
