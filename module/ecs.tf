@@ -92,6 +92,7 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Bucket-level operations
         Effect = "Allow"
         Action = [
           "s3:GetObject",
@@ -104,6 +105,12 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
           aws_s3_bucket.media_offload.arn,
           "${aws_s3_bucket.media_offload.arn}/*"
         ]
+      },
+      {
+        # Required by WordPress Offload Media Lite to list buckets
+        Effect   = "Allow"
+        Action   = "s3:ListAllMyBuckets"
+        Resource = "*"
       }
     ]
   })
@@ -218,6 +225,11 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "WORDPRESS_PASSWORD"
           value = var.wp_password
+        },
+        {
+          # Store PHP sessions on EFS for sharing across ECS tasks
+          name  = "PHP_SESSION_SAVE_PATH"
+          value = "${var.efs_mount_path}/sessions"
         }
       ]
 

@@ -69,6 +69,14 @@ resource "aws_lb_target_group" "ecs" {
     matcher             = "200-399"
   }
 
+  # Enable sticky sessions for WordPress admin login
+  # This ensures users stay connected to the same container during their session
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400 # 24 hours
+    enabled         = true
+  }
+
   deregistration_delay = 30
 
   lifecycle {
