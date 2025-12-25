@@ -83,6 +83,41 @@ resource "aws_iam_role_policy" "ecs_task_efs" {
   })
 }
 
+# Policy for ECS Task to access S3 Media Offload bucket
+resource "aws_iam_role_policy" "ecs_task_s3_media" {
+  name = "${var.project_name}-ecs-task-s3-media-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Bucket-level operations
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+          "s3:PutObjectAcl",
+          "s3:GetObjectAcl"
+        ]
+        Resource = [
+          aws_s3_bucket.media_offload.arn,
+          "${aws_s3_bucket.media_offload.arn}/*"
+        ]
+      },
+      {
+        # Required by WordPress Offload Media Lite to list buckets
+        Effect   = "Allow"
+        Action   = "s3:ListAllMyBuckets"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Security Group for ECS Tasks
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
@@ -150,7 +185,7 @@ resource "aws_ecs_task_definition" "main" {
   container_definitions = jsonencode([
     {
       name      = "wordpress"
-      image     = var.container_image
+      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.image_tag}"
       essential = true
 
       portMappings = [
@@ -192,6 +227,11 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "WORDPRESS_PASSWORD"
           value = var.wp_password
+        },
+        {
+          # Store PHP sessions on EFS for sharing across ECS tasks
+          name  = "PHP_SESSION_SAVE_PATH"
+          value = "${var.efs_mount_path}/sessions"
         }
       ]
 

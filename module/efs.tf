@@ -50,22 +50,22 @@ resource "aws_efs_mount_target" "main" {
   security_groups = [aws_security_group.efs.id]
 }
 
-# EFS Access Point for ECS (可選，但建議使用)
+# EFS Access Point for ECS
+# Bitnami containers run as UID 1001 (daemon user)
 resource "aws_efs_access_point" "ecs" {
   file_system_id = aws_efs_file_system.main.id
 
-  # 移除 posix_user 強制設定，讓容器可以使用 root 權限 (配合 ClientRootAccess)
-  # posix_user {
-  #   uid = 1000
-  #   gid = 1000
-  # }
+  posix_user {
+    uid = 1001
+    gid = 1001
+  }
 
   root_directory {
-    path = "/ecs"
+    path = "/bitnami"
     creation_info {
-      owner_uid   = 1000
-      owner_gid   = 1000
-      permissions = "755"
+      owner_uid   = 1001
+      owner_gid   = 1001
+      permissions = "0755"
     }
   }
 

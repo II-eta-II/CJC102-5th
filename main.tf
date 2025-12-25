@@ -36,10 +36,13 @@ provider "aws" {
 
   # 使用變數設定預設標籤
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -50,10 +53,13 @@ provider "aws" {
   profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -71,10 +77,13 @@ provider "aws" {
   }
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -101,16 +110,17 @@ module "wordpress" {
   private_subnet_cidrs = var.private_subnet_cidrs
 
   # ECS Configuration
-  ecs_cluster_name  = var.ecs_cluster_name
-  ecs_service_name  = var.ecs_service_name
-  container_image   = var.container_image
-  container_port    = var.container_port
-  ecs_task_cpu      = var.ecs_task_cpu
-  ecs_task_memory   = var.ecs_task_memory
-  ecs_desired_count = var.ecs_desired_count
-  ecs_min_capacity  = var.ecs_min_capacity
-  ecs_max_capacity  = var.ecs_max_capacity
-  efs_mount_path    = var.efs_mount_path
+  ecs_cluster_name    = var.ecs_cluster_name
+  ecs_service_name    = var.ecs_service_name
+  ecr_repository_name = var.ecr_repository_name
+  image_tag           = var.image_tag
+  container_port      = var.container_port
+  ecs_task_cpu        = var.ecs_task_cpu
+  ecs_task_memory     = var.ecs_task_memory
+  ecs_desired_count   = var.ecs_desired_count
+  ecs_min_capacity    = var.ecs_min_capacity
+  ecs_max_capacity    = var.ecs_max_capacity
+  efs_mount_path      = var.efs_mount_path
 
   # RDS Configuration
   db_name              = var.db_name
