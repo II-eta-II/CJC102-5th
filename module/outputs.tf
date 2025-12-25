@@ -206,3 +206,9 @@ output "cloudfront_url" {
   description = "URL to access the application via CloudFront"
   value       = "https://${aws_cloudfront_distribution.main.domain_name}"
 }
+
+# ECR Outputs
+output "ecr_repository_url" {
+  description = "ECR repository URL for WordPress image"
+  value       = aws_ecr_repository.wordpress.repository_url
+}

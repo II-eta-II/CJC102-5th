@@ -62,14 +62,20 @@ variable "ecs_service_name" {
   default     = "wordpress-service"
 }
 
-variable "container_image" {
-  description = "Docker image for the container"
+variable "ecr_repository_name" {
+  description = "ECR repository name for WordPress image"
   type        = string
-  default     = "public.ecr.aws/bitnami/wordpress:latest"
+  default     = "usa-wordpress"
+}
+
+variable "image_tag" {
+  description = "Docker image tag to deploy"
+  type        = string
+  default     = "latest"
 }
 
 variable "container_port" {
-  description = "Port exposed by the container"
+  description = "Port exposed by the container (80 for official WordPress, 8080 for Bitnami)"
   type        = number
   default     = 8080
 }
@@ -105,9 +111,9 @@ variable "ecs_max_capacity" {
 }
 
 variable "efs_mount_path" {
-  description = "Path to mount EFS in container"
+  description = "Path to mount EFS in container (Bitnami: /bitnami, Official: /var/www/html)"
   type        = string
-  default     = "/var/www/html/wp-content"
+  default     = "/bitnami"
 }
 
 # RDS Configuration

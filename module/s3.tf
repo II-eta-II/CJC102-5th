@@ -244,14 +244,22 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "media_offload" {
   }
 }
 
-# S3 Bucket Public Access Block for Media
+# S3 Bucket Ownership Controls for Media (enable ACLs)
+resource "aws_s3_bucket_ownership_controls" "media_offload" {
+  bucket = aws_s3_bucket.media_offload.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+# Note: Offload Media plugin needs to set public ACLs on objects
 resource "aws_s3_bucket_public_access_block" "media_offload" {
   bucket = aws_s3_bucket.media_offload.id
 
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
 }
 
 # S3 Bucket CORS Configuration for WordPress uploads

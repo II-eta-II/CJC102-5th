@@ -99,7 +99,9 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
           "s3:PutObject",
           "s3:DeleteObject",
           "s3:ListBucket",
-          "s3:GetBucketLocation"
+          "s3:GetBucketLocation",
+          "s3:PutObjectAcl",
+          "s3:GetObjectAcl"
         ]
         Resource = [
           aws_s3_bucket.media_offload.arn,
@@ -183,7 +185,7 @@ resource "aws_ecs_task_definition" "main" {
   container_definitions = jsonencode([
     {
       name      = "wordpress"
-      image     = var.container_image
+      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.image_tag}"
       essential = true
 
       portMappings = [

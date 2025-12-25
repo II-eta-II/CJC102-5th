@@ -54,10 +54,16 @@ variable "ecs_service_name" {
   default     = "wordpress-service"
 }
 
-variable "container_image" {
-  description = "Docker image for the container"
+variable "ecr_repository_name" {
+  description = "ECR repository name for WordPress image"
   type        = string
-  default     = "public.ecr.aws/bitnami/wordpress:latest"
+  default     = "usa-wordpress"
+}
+
+variable "image_tag" {
+  description = "Docker image tag to deploy"
+  type        = string
+  default     = "latest"
 }
 
 variable "container_port" {

@@ -89,3 +89,8 @@ output "s3_media_offload_bucket_name" {
   description = "S3 bucket name for WordPress media offload"
   value       = module.wordpress.s3_media_offload_bucket_name
 }
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for WordPress image"
+  value       = module.wordpress.ecr_repository_url
+}
