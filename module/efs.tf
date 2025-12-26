@@ -25,9 +25,13 @@ resource "aws_security_group" "efs" {
   }
 }
 
-# EFS File System
+# =============================================================================
+# Blue Environment EFS
+# =============================================================================
+
+# EFS File System - Blue
 resource "aws_efs_file_system" "main" {
-  creation_token = "${var.project_name}-efs"
+  creation_token = "${var.project_name}-efs-blue"
   encrypted      = true
 
   performance_mode = "generalPurpose"
@@ -38,7 +42,8 @@ resource "aws_efs_file_system" "main" {
   }
 
   tags = {
-    Name = "${var.project_name}-efs"
+    Name        = "${var.project_name}-efs-blue"
+    Environment = "blue"
   }
 }
 
@@ -50,7 +55,7 @@ resource "aws_efs_mount_target" "main" {
   security_groups = [aws_security_group.efs.id]
 }
 
-# EFS Access Point for ECS
+# EFS Access Point for ECS - Blue
 # Bitnami containers run as UID 1001 (daemon user)
 resource "aws_efs_access_point" "ecs" {
   file_system_id = aws_efs_file_system.main.id
@@ -70,6 +75,58 @@ resource "aws_efs_access_point" "ecs" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-access-point"
+    Name        = "${var.project_name}-ecs-access-point-blue"
+    Environment = "blue"
+  }
+}
+
+# =============================================================================
+# Green Environment EFS (Blue-Green Deployment)
+# =============================================================================
+
+resource "aws_efs_file_system" "green" {
+  creation_token = "${var.project_name}-efs-green"
+  encrypted      = true
+
+  performance_mode = "generalPurpose"
+  throughput_mode  = "bursting"
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-efs-green"
+    Environment = "green"
+  }
+}
+
+resource "aws_efs_mount_target" "green" {
+  count           = length(var.availability_zones)
+  file_system_id  = aws_efs_file_system.green.id
+  subnet_id       = aws_subnet.private[count.index].id
+  security_groups = [aws_security_group.efs.id]
+}
+
+resource "aws_efs_access_point" "green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 1001
+    gid = 1001
+  }
+
+  root_directory {
+    path = "/bitnami"
+    creation_info {
+      owner_uid   = 1001
+      owner_gid   = 1001
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-access-point-green"
+    Environment = "green"
   }
 }

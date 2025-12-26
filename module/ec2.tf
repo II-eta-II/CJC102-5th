@@ -50,9 +50,13 @@ resource "aws_lb" "main" {
   }
 }
 
-# Target Group for ECS Service
+# =============================================================================
+# Blue Environment Target Group
+# =============================================================================
+
+# Target Group for ECS Service - Blue
 resource "aws_lb_target_group" "ecs" {
-  name_prefix = "ecs-"
+  name_prefix = "blue-"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -69,11 +73,9 @@ resource "aws_lb_target_group" "ecs" {
     matcher             = "200-399"
   }
 
-  # Enable sticky sessions for WordPress admin login
-  # This ensures users stay connected to the same container during their session
   stickiness {
     type            = "lb_cookie"
-    cookie_duration = 86400 # 24 hours
+    cookie_duration = 86400
     enabled         = true
   }
 
@@ -84,7 +86,8 @@ resource "aws_lb_target_group" "ecs" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-target-group"
+    Name        = "${var.project_name}-ecs-target-group-blue"
+    Environment = "blue"
   }
 }
 
@@ -105,7 +108,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# ALB Listener - HTTPS
+# ALB Listener - HTTPS (with weighted routing for Blue-Green)
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.main.arn
   port              = "443"
@@ -114,8 +117,60 @@ resource "aws_lb_listener" "https" {
   certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs.arn
+    type = "forward"
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.ecs.arn
+        weight = var.blue_weight
+      }
+      target_group {
+        arn    = aws_lb_target_group.ecs_green.arn
+        weight = var.green_weight
+      }
+      stickiness {
+        enabled  = true
+        duration = 3600
+      }
+    }
   }
 }
 
+# =============================================================================
+# Green Environment Target Group (Blue-Green Deployment)
+# =============================================================================
+
+resource "aws_lb_target_group" "ecs_green" {
+  name_prefix = "green-"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 20
+    interval            = 60
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+  }
+
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
+  }
+
+  deregistration_delay = 30
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-target-group-green"
+    Environment = "green"
+  }
+}

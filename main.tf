@@ -148,5 +148,10 @@ module "wordpress" {
   route53_zone_id     = var.route53_zone_id
   route53_domain_name = var.route53_domain_name
   subdomain           = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
-}
 
+  # Blue-Green Deployment Configuration
+  green_ecs_desired_count = var.green_ecs_desired_count
+  green_image_tag         = var.green_image_tag
+  blue_weight             = var.blue_weight
+  green_weight            = var.green_weight
+}

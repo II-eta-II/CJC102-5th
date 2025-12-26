@@ -212,5 +212,30 @@ variable "subdomain" {
   type        = string
 }
 
+# =============================================================================
+# Blue-Green Deployment Configuration
+# =============================================================================
 
+variable "green_ecs_desired_count" {
+  description = "Desired count for Green ECS service (0 = standby mode)"
+  type        = number
+  default     = 0
+}
 
+variable "green_image_tag" {
+  description = "Docker image tag for Green environment"
+  type        = string
+  default     = "latest"
+}
+
+variable "blue_weight" {
+  description = "Traffic weight for Blue environment (0-100)"
+  type        = number
+  default     = 100
+}
+
+variable "green_weight" {
+  description = "Traffic weight for Green environment (0-100)"
+  type        = number
+  default     = 0
+}

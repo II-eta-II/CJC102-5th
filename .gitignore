@@ -29,3 +29,4 @@ terraform.rc
 
 .vscode/*
 # .aws/*
+.ai
