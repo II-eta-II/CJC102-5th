@@ -191,7 +191,7 @@ resource "aws_ecs_task_definition" "main" {
   container_definitions = jsonencode([
     {
       name      = "wordpress"
-      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.image_tag}"
+      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.blue_image_tag}"
       essential = true
 
       portMappings = [
@@ -278,7 +278,7 @@ resource "aws_ecs_service" "main" {
   name            = "${var.ecs_service_name}-blue"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.main.arn
-  desired_count   = var.ecs_desired_count
+  desired_count   = var.blue_ecs_desired_count
   launch_type     = "FARGATE"
 
   # 給予任務 120 秒的啟動緩衝時間
@@ -310,8 +310,8 @@ resource "aws_ecs_service" "main" {
 
 # Application Auto Scaling Target
 resource "aws_appautoscaling_target" "ecs" {
-  max_capacity       = var.ecs_max_capacity
-  min_capacity       = var.ecs_min_capacity
+  max_capacity       = var.blue_ecs_max_capacity
+  min_capacity       = var.blue_ecs_min_capacity
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.main.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
@@ -571,8 +571,8 @@ resource "aws_ecs_service" "green" {
 }
 
 resource "aws_appautoscaling_target" "ecs_green" {
-  max_capacity       = var.ecs_max_capacity
-  min_capacity       = 0
+  max_capacity       = var.green_ecs_max_capacity
+  min_capacity       = var.green_ecs_min_capacity
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.green.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
