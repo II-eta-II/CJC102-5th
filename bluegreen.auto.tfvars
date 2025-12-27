@@ -24,8 +24,8 @@ green_image_tag         = "official" # Green Docker Image Tag
 # ALB Traffic Weights (blue_weight + green_weight = 100)
 # -----------------------------------------------------------------------------
 
-blue_weight  = 0 # Blue 流量權重 (0-100)
-green_weight = 100   # Green 流量權重 (0-100)
+blue_weight  = 100 # Blue 流量權重 (0-100)
+green_weight = 0   # Green 流量權重 (0-100)
 
 # =============================================================================
 # Usage Examples:
