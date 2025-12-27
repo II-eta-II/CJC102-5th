@@ -73,12 +73,6 @@ resource "aws_lb_target_group" "ecs" {
     matcher             = "200-399"
   }
 
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
-  }
-
   deregistration_delay = 30
 
   lifecycle {
@@ -125,10 +119,6 @@ resource "aws_lb_listener" "https" {
       target_group {
         arn    = aws_lb_target_group.ecs_green.arn
         weight = var.green_weight
-      }
-      stickiness {
-        enabled  = true
-        duration = 3600
       }
     }
   }
@@ -188,12 +178,6 @@ resource "aws_lb_target_group" "ecs_green" {
     path                = "/"
     protocol            = "HTTP"
     matcher             = "200-399"
-  }
-
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
   }
 
   deregistration_delay = 30
