@@ -82,9 +82,9 @@ resource "aws_kinesis_firehose_delivery_stream" "waf_logs" {
   destination = "extended_s3"
 
   extended_s3_configuration {
-    role_arn   = aws_iam_role.firehose_waf.arn
-    bucket_arn = aws_s3_bucket.waf_logs.arn
-    prefix     = "waf-logs/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/"
+    role_arn            = aws_iam_role.firehose_waf.arn
+    bucket_arn          = aws_s3_bucket.waf_logs.arn
+    prefix              = "waf-logs/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/"
     error_output_prefix = "waf-logs-errors/"
 
     buffering_size     = 5
@@ -94,7 +94,7 @@ resource "aws_kinesis_firehose_delivery_stream" "waf_logs" {
 
     cloudwatch_logging_options {
       enabled         = true
-      log_group_name = aws_cloudwatch_log_group.firehose_waf.name
+      log_group_name  = aws_cloudwatch_log_group.firehose_waf.name
       log_stream_name = "${var.project_name}-waf-firehose-stream"
     }
   }

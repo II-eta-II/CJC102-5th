@@ -13,7 +13,8 @@ resource "aws_acm_certificate" "main" {
   validation_method = "DNS"
 
   subject_alternative_names = [
-    "*.${local.route53_domain_name}"
+    "*.${local.route53_domain_name}",
+    "*.${var.subdomain}.${local.route53_domain_name}"
   ]
 
   lifecycle {
@@ -105,15 +106,48 @@ resource "aws_acm_certificate_validation" "cloudfront" {
   validation_record_fqdns = [aws_route53_record.cloudfront_acm_validation.fqdn]
 }
 
-# Route53 CNAME Record for subdomain -> CloudFront
+# Route53 A Record for subdomain -> ALB (bypassing CloudFront and WAF)
 resource "aws_route53_record" "entry_point" {
   provider = aws.route53
   zone_id  = local.route53_zone_id
   name     = "${var.subdomain}.${local.route53_domain_name}"
-  type     = "CNAME"
-  ttl      = 300
-  records  = [aws_cloudfront_distribution.main.domain_name]
+  type     = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
 }
+
+# Route53 A Record for Blue environment subdomain
+resource "aws_route53_record" "blue_subdomain" {
+  provider = aws.route53
+  zone_id  = local.route53_zone_id
+  name     = "blue.${var.subdomain}.${local.route53_domain_name}"
+  type     = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
+# Route53 A Record for Green environment subdomain
+resource "aws_route53_record" "green_subdomain" {
+  provider = aws.route53
+  zone_id  = local.route53_zone_id
+  name     = "green.${var.subdomain}.${local.route53_domain_name}"
+  type     = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
 
 
 

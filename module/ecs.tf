@@ -1,10 +1,15 @@
-# CloudWatch Log Group
+﻿# =============================================================================
+# Blue Environment ECS
+# =============================================================================
+
+# CloudWatch Log Group - Blue
 resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/ecs/${var.project_name}-${var.ecs_service_name}"
+  name              = "/ecs/${var.project_name}-${var.ecs_service_name}-blue"
   retention_in_days = 7
 
   tags = {
-    Name = "${var.project_name}-ecs-logs"
+    Name        = "${var.project_name}-ecs-logs-blue"
+    Environment = "blue"
   }
 }
 
@@ -118,10 +123,32 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
   })
 }
 
-# Security Group for ECS Tasks
+# Policy for ECS Exec (SSM Session Manager)
+resource "aws_iam_role_policy" "ecs_task_exec_ssm" {
+  name = "${var.project_name}-ecs-task-exec-ssm-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Security Group for ECS Tasks - Blue
 resource "aws_security_group" "ecs_tasks" {
-  name        = "${var.project_name}-ecs-tasks-sg"
-  description = "Security group for ECS tasks"
+  name        = "${var.project_name}-ecs-tasks-blue-sg"
+  description = "Security group for Blue ECS tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -141,7 +168,8 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-tasks-sg"
+    Name        = "${var.project_name}-ecs-tasks-blue-sg"
+    Environment = "blue"
   }
 }
 
@@ -185,7 +213,7 @@ resource "aws_ecs_task_definition" "main" {
   container_definitions = jsonencode([
     {
       name      = "wordpress"
-      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.image_tag}"
+      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.blue_image_tag}"
       essential = true
 
       portMappings = [
@@ -195,29 +223,21 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
 
-      mountPoints = [
-        {
-          sourceVolume  = "efs-storage"
-          containerPath = var.efs_mount_path
-          readOnly      = false
-        }
-      ]
-
       environment = [
         {
-          name  = "WORDPRESS_DATABASE_HOST"
+          name  = "WORDPRESS_DB_HOST"
           value = aws_db_instance.main.address
         },
         {
-          name  = "WORDPRESS_DATABASE_NAME"
+          name  = "WORDPRESS_DB_NAME"
           value = var.db_name
         },
         {
-          name  = "WORDPRESS_DATABASE_USER"
+          name  = "WORDPRESS_DB_USER"
           value = var.db_username
         },
         {
-          name  = "WORDPRESS_DATABASE_PASSWORD"
+          name  = "WORDPRESS_DB_PASSWORD"
           value = var.db_password
         },
         {
@@ -229,9 +249,19 @@ resource "aws_ecs_task_definition" "main" {
           value = var.wp_password
         },
         {
-          # Store PHP sessions on EFS for sharing across ECS tasks
-          name  = "PHP_SESSION_SAVE_PATH"
-          value = "${var.efs_mount_path}/sessions"
+          name  = "WORDPRESS_CONFIG_EXTRA"
+          value = <<-EOT
+            // 修正反向代理下的 HTTPS 偵測
+            if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+              $$_SERVER['HTTPS'] = 'on';
+              $$_SERVER['SERVER_PORT'] = 443;
+            }
+            
+            // 信任反向代理的 IP
+            if (isset($$_SERVER['HTTP_X_FORWARDED_FOR'])) {
+              $$_SERVER['REMOTE_ADDR'] = explode(',', $$_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+            }
+          EOT
         }
       ]
 
@@ -246,35 +276,22 @@ resource "aws_ecs_task_definition" "main" {
     }
   ])
 
-  volume {
-    name = "efs-storage"
-
-    efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.main.id
-      transit_encryption      = "ENABLED"
-      transit_encryption_port = 2049
-
-      authorization_config {
-        access_point_id = aws_efs_access_point.ecs.id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = {
-    Name = "${var.project_name}-task-definition"
+    Name        = "${var.project_name}-task-definition-blue"
+    Environment = "blue"
   }
 }
 
-# ECS Service
+# ECS Service - Blue
 resource "aws_ecs_service" "main" {
-  name            = var.ecs_service_name
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.main.arn
-  desired_count   = var.ecs_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${var.ecs_service_name}-blue"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.main.arn
+  desired_count          = var.blue_ecs_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
-  # 給予任務 120 秒的啟動緩衝時間
+  # 蝯虫?隞餃? 120 蝘???蝺抵???
   health_check_grace_period_seconds = 120
 
   network_configuration {
@@ -290,7 +307,8 @@ resource "aws_ecs_service" "main" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-service"
+    Name        = "${var.project_name}-ecs-service-blue"
+    Environment = "blue"
   }
 
   depends_on = [
@@ -302,8 +320,8 @@ resource "aws_ecs_service" "main" {
 
 # Application Auto Scaling Target
 resource "aws_appautoscaling_target" "ecs" {
-  max_capacity       = var.ecs_max_capacity
-  min_capacity       = var.ecs_min_capacity
+  max_capacity       = var.blue_ecs_max_capacity
+  min_capacity       = var.blue_ecs_min_capacity
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.main.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
@@ -339,6 +357,251 @@ resource "aws_appautoscaling_policy" "ecs_memory" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageMemoryUtilization"
     }
+    target_value       = 80.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+  }
+}
+
+# =============================================================================
+# Green Environment ECS (Blue-Green Deployment)
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "ecs_green" {
+  name              = "/ecs/${var.project_name}-${var.ecs_service_name}-green"
+  retention_in_days = 7
+
+  tags = {
+    Name        = "${var.project_name}-ecs-logs-green"
+    Environment = "green"
+  }
+}
+
+resource "aws_security_group" "ecs_tasks_green" {
+  name        = "${var.project_name}-ecs-tasks-green-sg"
+  description = "Security group for Green ECS tasks"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "HTTP from ALB"
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-tasks-green-sg"
+    Environment = "green"
+  }
+}
+
+resource "aws_iam_role" "ecs_task_green" {
+  name = "${var.project_name}-ecs-task-role-green"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-ecs-task-role-green"
+    Environment = "green"
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_efs_green" {
+  name = "${var.project_name}-ecs-task-efs-policy-green"
+  role = aws_iam_role.ecs_task_green.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "elasticfilesystem:ClientMount",
+        "elasticfilesystem:ClientWrite",
+        "elasticfilesystem:ClientRootAccess",
+        "elasticfilesystem:DescribeFileSystems"
+      ]
+      Resource = [aws_efs_file_system.green.arn, aws_efs_access_point.green.arn]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_s3_media_green" {
+  name = "${var.project_name}-ecs-task-s3-media-policy-green"
+  role = aws_iam_role.ecs_task_green.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:PutObjectAcl", "s3:GetObjectAcl"]
+        Resource = [aws_s3_bucket.media_offload.arn, "${aws_s3_bucket.media_offload.arn}/*"]
+      },
+      { Effect = "Allow", Action = "s3:ListAllMyBuckets", Resource = "*" }
+    ]
+  })
+}
+
+resource "aws_ecs_task_definition" "green" {
+  family                   = "${var.project_name}-${var.ecs_service_name}-green"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.ecs_task_cpu
+  memory                   = var.ecs_task_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task_green.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "wordpress"
+      image     = "${aws_ecr_repository.wordpress.repository_url}:${var.green_image_tag}"
+      essential = true
+
+      portMappings = [
+        {
+          containerPort = var.container_port
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "WORDPRESS_DB_HOST"
+          value = aws_db_instance.green.address
+        },
+        {
+          name  = "WORDPRESS_DB_NAME"
+          value = var.db_name
+        },
+        {
+          name  = "WORDPRESS_DB_USER"
+          value = var.db_username
+        },
+        {
+          name  = "WORDPRESS_DB_PASSWORD"
+          value = var.db_password
+        },
+        {
+          name  = "WORDPRESS_USERNAME"
+          value = var.wp_username
+        },
+        {
+          name  = "WORDPRESS_PASSWORD"
+          value = var.wp_password
+        },
+        {
+          name  = "WORDPRESS_CONFIG_EXTRA"
+          value = <<-EOT
+            // 修正反向代理下的 HTTPS 偵測
+            if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+              $$_SERVER['HTTPS'] = 'on';
+              $$_SERVER['SERVER_PORT'] = 443;
+            }
+            
+            // 信任反向代理的 IP
+            if (isset($$_SERVER['HTTP_X_FORWARDED_FOR'])) {
+              $$_SERVER['REMOTE_ADDR'] = explode(',', $$_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+            }
+          EOT
+        }
+
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs_green.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "wordpress"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name        = "${var.project_name}-task-definition-green"
+    Environment = "green"
+  }
+}
+
+resource "aws_ecs_service" "green" {
+  name                   = "${var.ecs_service_name}-green"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.green.arn
+  desired_count          = var.green_ecs_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
+
+  health_check_grace_period_seconds = 120
+
+  network_configuration {
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.ecs_tasks_green.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.ecs_green.arn
+    container_name   = "wordpress"
+    container_port   = var.container_port
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-service-green"
+    Environment = "green"
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution, aws_efs_mount_target.green, aws_lb_listener.http]
+}
+
+resource "aws_appautoscaling_target" "ecs_green" {
+  max_capacity       = var.green_ecs_max_capacity
+  min_capacity       = var.green_ecs_min_capacity
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.green.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "ecs_cpu_green" {
+  name               = "${var.project_name}-ecs-cpu-autoscaling-green"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_green.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_green.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_green.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification { predefined_metric_type = "ECSServiceAverageCPUUtilization" }
+    target_value       = 70.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+  }
+}
+
+resource "aws_appautoscaling_policy" "ecs_memory_green" {
+  name               = "${var.project_name}-ecs-memory-autoscaling-green"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_green.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_green.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_green.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification { predefined_metric_type = "ECSServiceAverageMemoryUtilization" }
     target_value       = 80.0
     scale_in_cooldown  = 300
     scale_out_cooldown = 60

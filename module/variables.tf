@@ -69,7 +69,7 @@ variable "image_tag" {
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number
-  default     = 8080
+  default     = 80
 }
 
 variable "ecs_task_cpu" {
@@ -84,23 +84,7 @@ variable "ecs_task_memory" {
   default     = 2048
 }
 
-variable "ecs_desired_count" {
-  description = "Desired number of ECS tasks"
-  type        = number
-  default     = 2
-}
 
-variable "ecs_min_capacity" {
-  description = "Minimum number of ECS tasks"
-  type        = number
-  default     = 1
-}
-
-variable "ecs_max_capacity" {
-  description = "Maximum number of ECS tasks"
-  type        = number
-  default     = 10
-}
 
 variable "efs_mount_path" {
   description = "Path to mount EFS in container"
@@ -212,5 +196,69 @@ variable "subdomain" {
   type        = string
 }
 
+# =============================================================================
+# Blue-Green Deployment Configuration
+# =============================================================================
 
+# Blue Environment
+variable "blue_ecs_desired_count" {
+  description = "Desired count for Blue ECS service (0 = standby mode)"
+  type        = number
+  default     = 2
+}
 
+variable "blue_ecs_min_capacity" {
+  description = "Minimum capacity for Blue ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "blue_ecs_max_capacity" {
+  description = "Maximum capacity for Blue ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "blue_image_tag" {
+  description = "Docker image tag for Blue environment"
+  type        = string
+  default     = "latest"
+}
+
+# Green Environment
+variable "green_ecs_desired_count" {
+  description = "Desired count for Green ECS service (0 = standby mode)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_min_capacity" {
+  description = "Minimum capacity for Green ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_max_capacity" {
+  description = "Maximum capacity for Green ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "green_image_tag" {
+  description = "Docker image tag for Green environment"
+  type        = string
+  default     = "latest"
+}
+
+# ALB Traffic Weights
+variable "blue_weight" {
+  description = "Traffic weight for Blue environment (0-100)"
+  type        = number
+  default     = 100
+}
+
+variable "green_weight" {
+  description = "Traffic weight for Green environment (0-100)"
+  type        = number
+  default     = 0
+}

@@ -212,3 +212,27 @@ output "ecr_repository_url" {
   description = "ECR repository URL for WordPress image"
   value       = aws_ecr_repository.wordpress.repository_url
 }
+
+# =============================================================================
+# Green Environment Outputs (Blue-Green Deployment)
+# =============================================================================
+
+output "rds_endpoint_green" {
+  description = "RDS endpoint for Green environment"
+  value       = aws_db_instance.green.endpoint
+}
+
+output "efs_id_green" {
+  description = "EFS file system ID for Green environment"
+  value       = aws_efs_file_system.green.id
+}
+
+output "ecs_service_name_green" {
+  description = "ECS service name for Green environment"
+  value       = aws_ecs_service.green.name
+}
+
+output "target_group_arn_green" {
+  description = "Target group ARN for Green environment"
+  value       = aws_lb_target_group.ecs_green.arn
+}

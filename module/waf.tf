@@ -142,13 +142,13 @@ resource "aws_wafv2_web_acl_logging_configuration" "main" {
   provider                = aws.us_east_1
   resource_arn            = aws_wafv2_web_acl.main.arn
   log_destination_configs = [aws_kinesis_firehose_delivery_stream.waf_logs.arn]
-  
+
   redacted_fields {
     single_header {
       name = "authorization"
     }
   }
-  
+
   redacted_fields {
     single_header {
       name = "cookie"
