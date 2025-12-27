@@ -69,7 +69,7 @@ variable "image_tag" {
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number
-  default     = 8080
+  default     = 80
 }
 
 variable "ecs_task_cpu" {

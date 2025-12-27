@@ -1,16 +1,16 @@
-# CloudFront Distribution
+﻿# CloudFront Distribution
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
   comment             = "CloudFront distribution for ${var.project_name}"
-  default_root_object = "index.html"
+  default_root_object = ""
   price_class         = var.cloudfront_price_class
   web_acl_id          = aws_wafv2_web_acl.main.arn
 
   # Custom domain aliases
   aliases = ["${var.subdomain}.${local.route53_domain_name}"]
 
-  # ALB 作為來�?（OAC ?�能?�於 S3，ALB 不�?要�?
+  # ALB 雿靘?嚗AC ?芾?冽 S3嚗LB 銝?閬?
   origin {
     domain_name = aws_lb.main.dns_name
     origin_id   = "ALB-${var.project_name}"
@@ -18,7 +18,7 @@ resource "aws_cloudfront_distribution" "main" {
     custom_origin_config {
       http_port                = 80
       https_port               = 443
-      origin_protocol_policy   = "https-only"
+      origin_protocol_policy   = "http-only"
       origin_ssl_protocols     = ["TLSv1.2"]
       origin_read_timeout      = 60
       origin_keepalive_timeout = 5
@@ -30,14 +30,14 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
-  # ?�選：S3 作為?��?資�?來�?
+  # ?舫嚗3 雿??鞈?靘?
   origin {
     domain_name              = aws_s3_bucket.static_assets.bucket_regional_domain_name
     origin_id                = "S3-${var.project_name}-static"
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
 
-  # ?�設快�?行為（�???ALB�?
+  # ?身敹怠?銵嚗???ALB嚗?
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -58,7 +58,7 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl                = var.cloudfront_max_ttl
   }
 
-  # ?��?資�?快�?行為（�???S3�?
+  # ??鞈?敹怠?銵嚗???S3嚗?
   ordered_cache_behavior {
     path_pattern     = "/static/*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
@@ -79,7 +79,7 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl                = var.cloudfront_static_ttl
   }
 
-  # ?��??�誤?�面
+  # ?芾??航炊?
   custom_error_response {
     error_code         = 403
     response_code      = 403
@@ -92,7 +92,7 @@ resource "aws_cloudfront_distribution" "main" {
     response_page_path = "/error.html"
   }
 
-  # ?��?設�?
+  # ?亥?閮剖?
   logging_config {
     bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
     include_cookies = false
@@ -151,7 +151,9 @@ resource "aws_s3_bucket_policy" "static_assets" {
   })
 }
 
-# 注�?：CloudFront ?�通�??�網訪�? ALB
-# ALB ??security group 已�??�許來自網�?網路??HTTP/HTTPS 流�?
-# 如�??�要更?�格?��??�控?��??�以?�慮使用 AWS WAF 來�??��?�?IP
+# 瘜冽?嚗loudFront ???祉雯閮芸? ALB
+# ALB ??security group 撌脩??迂靘蝬脤?蝬脰楝??HTTP/HTTPS 瘚?
+# 憒??閬?湔???冽?塚??臭誑?雿輻 AWS WAF 靘??嗡?皞?IP
+
+
 

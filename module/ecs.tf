@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Blue Environment ECS
 # =============================================================================
 
@@ -123,6 +123,28 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
   })
 }
 
+# Policy for ECS Exec (SSM Session Manager)
+resource "aws_iam_role_policy" "ecs_task_exec_ssm" {
+  name = "${var.project_name}-ecs-task-exec-ssm-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Security Group for ECS Tasks - Blue
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-blue-sg"
@@ -201,29 +223,21 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
 
-      mountPoints = [
-        {
-          sourceVolume  = "efs-storage"
-          containerPath = var.efs_mount_path
-          readOnly      = false
-        }
-      ]
-
       environment = [
         {
-          name  = "WORDPRESS_DATABASE_HOST"
+          name  = "WORDPRESS_DB_HOST"
           value = aws_db_instance.main.address
         },
         {
-          name  = "WORDPRESS_DATABASE_NAME"
+          name  = "WORDPRESS_DB_NAME"
           value = var.db_name
         },
         {
-          name  = "WORDPRESS_DATABASE_USER"
+          name  = "WORDPRESS_DB_USER"
           value = var.db_username
         },
         {
-          name  = "WORDPRESS_DATABASE_PASSWORD"
+          name  = "WORDPRESS_DB_PASSWORD"
           value = var.db_password
         },
         {
@@ -235,9 +249,19 @@ resource "aws_ecs_task_definition" "main" {
           value = var.wp_password
         },
         {
-          # Store PHP sessions on EFS for sharing across ECS tasks
-          name  = "PHP_SESSION_SAVE_PATH"
-          value = "${var.efs_mount_path}/sessions"
+          name  = "WORDPRESS_CONFIG_EXTRA"
+          value = <<-EOT
+            // 修正反向代理下的 HTTPS 偵測
+            if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+              $$_SERVER['HTTPS'] = 'on';
+              $$_SERVER['SERVER_PORT'] = 443;
+            }
+            
+            // 信任反向代理的 IP
+            if (isset($$_SERVER['HTTP_X_FORWARDED_FOR'])) {
+              $$_SERVER['REMOTE_ADDR'] = explode(',', $$_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+            }
+          EOT
         }
       ]
 
@@ -252,21 +276,6 @@ resource "aws_ecs_task_definition" "main" {
     }
   ])
 
-  volume {
-    name = "efs-storage"
-
-    efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.main.id
-      transit_encryption      = "ENABLED"
-      transit_encryption_port = 2049
-
-      authorization_config {
-        access_point_id = aws_efs_access_point.ecs.id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = {
     Name        = "${var.project_name}-task-definition-blue"
     Environment = "blue"
@@ -275,13 +284,14 @@ resource "aws_ecs_task_definition" "main" {
 
 # ECS Service - Blue
 resource "aws_ecs_service" "main" {
-  name            = "${var.ecs_service_name}-blue"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.main.arn
-  desired_count   = var.blue_ecs_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${var.ecs_service_name}-blue"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.main.arn
+  desired_count          = var.blue_ecs_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
-  # 給予任務 120 秒的啟動緩衝時間
+  # 蝯虫?隞餃? 120 蝘???蝺抵???
   health_check_grace_period_seconds = 120
 
   network_configuration {
@@ -470,29 +480,21 @@ resource "aws_ecs_task_definition" "green" {
         }
       ]
 
-      mountPoints = [
-        {
-          sourceVolume  = "efs-storage"
-          containerPath = var.efs_mount_path
-          readOnly      = false
-        }
-      ]
-
       environment = [
         {
-          name  = "WORDPRESS_DATABASE_HOST"
+          name  = "WORDPRESS_DB_HOST"
           value = aws_db_instance.green.address
         },
         {
-          name  = "WORDPRESS_DATABASE_NAME"
+          name  = "WORDPRESS_DB_NAME"
           value = var.db_name
         },
         {
-          name  = "WORDPRESS_DATABASE_USER"
+          name  = "WORDPRESS_DB_USER"
           value = var.db_username
         },
         {
-          name  = "WORDPRESS_DATABASE_PASSWORD"
+          name  = "WORDPRESS_DB_PASSWORD"
           value = var.db_password
         },
         {
@@ -504,9 +506,21 @@ resource "aws_ecs_task_definition" "green" {
           value = var.wp_password
         },
         {
-          name  = "PHP_SESSION_SAVE_PATH"
-          value = "${var.efs_mount_path}/sessions"
+          name  = "WORDPRESS_CONFIG_EXTRA"
+          value = <<-EOT
+            // 修正反向代理下的 HTTPS 偵測
+            if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+              $$_SERVER['HTTPS'] = 'on';
+              $$_SERVER['SERVER_PORT'] = 443;
+            }
+            
+            // 信任反向代理的 IP
+            if (isset($$_SERVER['HTTP_X_FORWARDED_FOR'])) {
+              $$_SERVER['REMOTE_ADDR'] = explode(',', $$_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+            }
+          EOT
         }
+
       ]
 
       logConfiguration = {
@@ -520,21 +534,6 @@ resource "aws_ecs_task_definition" "green" {
     }
   ])
 
-  volume {
-    name = "efs-storage"
-
-    efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.green.id
-      transit_encryption      = "ENABLED"
-      transit_encryption_port = 2049
-
-      authorization_config {
-        access_point_id = aws_efs_access_point.green.id
-        iam             = "ENABLED"
-      }
-    }
-  }
-
   tags = {
     Name        = "${var.project_name}-task-definition-green"
     Environment = "green"
@@ -542,11 +541,12 @@ resource "aws_ecs_task_definition" "green" {
 }
 
 resource "aws_ecs_service" "green" {
-  name            = "${var.ecs_service_name}-green"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.green.arn
-  desired_count   = var.green_ecs_desired_count
-  launch_type     = "FARGATE"
+  name                   = "${var.ecs_service_name}-green"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.green.arn
+  desired_count          = var.green_ecs_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   health_check_grace_period_seconds = 120
 

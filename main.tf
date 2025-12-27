@@ -156,4 +156,10 @@ module "wordpress" {
   green_image_tag         = var.green_image_tag
   blue_weight             = var.blue_weight
   green_weight            = var.green_weight
+
+  # CI/CD Configuration
+  enable_cicd       = var.enable_cicd
+  github_repo_owner = var.github_repo_owner
+  github_repo_name  = var.github_repo_name
+  github_branch     = var.github_branch
 }

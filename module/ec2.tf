@@ -91,7 +91,7 @@ resource "aws_lb_target_group" "ecs" {
   }
 }
 
-# ALB Listener - HTTP (Redirect to HTTPS)
+# ALB Listener - HTTP (with weighted routing for Blue-Green, used by CloudFront)
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -99,7 +99,6 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type = "redirect"
-
     redirect {
       port        = "443"
       protocol    = "HTTPS"

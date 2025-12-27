@@ -105,14 +105,18 @@ resource "aws_acm_certificate_validation" "cloudfront" {
   validation_record_fqdns = [aws_route53_record.cloudfront_acm_validation.fqdn]
 }
 
-# Route53 CNAME Record for subdomain -> CloudFront
+# Route53 A Record for subdomain -> ALB (bypassing CloudFront and WAF)
 resource "aws_route53_record" "entry_point" {
   provider = aws.route53
   zone_id  = local.route53_zone_id
   name     = "${var.subdomain}.${local.route53_domain_name}"
-  type     = "CNAME"
-  ttl      = 300
-  records  = [aws_cloudfront_distribution.main.domain_name]
+  type     = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
 }
 
 

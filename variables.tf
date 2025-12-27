@@ -75,7 +75,7 @@ variable "image_tag" {
 variable "container_port" {
   description = "Port exposed by the container (80 for official WordPress, 8080 for Bitnami)"
   type        = number
-  default     = 8080
+  default     = 80
 }
 
 variable "ecs_task_cpu" {
@@ -271,3 +271,32 @@ variable "green_weight" {
   type        = number
   default     = 0
 }
+
+# =============================================================================
+# CI/CD Configuration
+# =============================================================================
+
+variable "enable_cicd" {
+  description = "Enable CI/CD pipeline for Docker image builds"
+  type        = bool
+  default     = false
+}
+
+variable "github_repo_owner" {
+  description = "GitHub repository owner (user or organization)"
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_name" {
+  description = "GitHub repository name"
+  type        = string
+  default     = ""
+}
+
+variable "github_branch" {
+  description = "GitHub branch to trigger builds"
+  type        = string
+  default     = "main"
+}
+
