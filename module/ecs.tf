@@ -136,6 +136,12 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
           "s3:GetBucketLocation"
         ]
         Resource = aws_s3_bucket.media_offload.arn
+      },
+      {
+        # Required by WordPress plugins to list buckets in UI
+        Effect   = "Allow"
+        Action   = "s3:ListAllMyBuckets"
+        Resource = "*"
       }
     ]
   })
@@ -286,6 +292,14 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
 
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
       mountPoints = [
         {
           sourceVolume  = "efs-wordpress"
@@ -415,6 +429,10 @@ resource "aws_cloudwatch_log_group" "ecs_green" {
   }
 }
 
+# =============================================================================
+# Green Environment - Security Groups
+# =============================================================================
+
 resource "aws_security_group" "ecs_tasks_green" {
   name        = "${var.project_name}-ecs-tasks-green-sg"
   description = "Security group for Green ECS tasks"
@@ -506,6 +524,12 @@ resource "aws_iam_role_policy" "ecs_task_s3_media_green" {
           "s3:GetBucketLocation"
         ]
         Resource = aws_s3_bucket.media_offload.arn
+      },
+      {
+        # Required by WordPress plugins to list buckets in UI
+        Effect   = "Allow"
+        Action   = "s3:ListAllMyBuckets"
+        Resource = "*"
       }
     ]
   })
@@ -577,6 +601,14 @@ resource "aws_ecs_task_definition" "green" {
           valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_password::"
         }
       ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
 
       mountPoints = [
         {
