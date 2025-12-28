@@ -117,27 +117,25 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
     Version = "2012-10-17"
     Statement = [
       {
-        # Bucket-level operations
+        # Object-level operations
         Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
           "s3:PutObjectAcl",
           "s3:GetObjectAcl"
         ]
-        Resource = [
-          aws_s3_bucket.media_offload.arn,
-          "${aws_s3_bucket.media_offload.arn}/*"
-        ]
+        Resource = "${aws_s3_bucket.media_offload.arn}/*"
       },
       {
-        # Required by WordPress Offload Media Lite to list buckets
-        Effect   = "Allow"
-        Action   = "s3:ListAllMyBuckets"
-        Resource = "*"
+        # Bucket-level operations (scoped to specific bucket only)
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = aws_s3_bucket.media_offload.arn
       }
     ]
   })
@@ -288,6 +286,14 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
 
+      mountPoints = [
+        {
+          sourceVolume  = "efs-wordpress"
+          containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -298,6 +304,15 @@ resource "aws_ecs_task_definition" "main" {
       }
     }
   ])
+
+  volume {
+    name = "efs-wordpress"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+    }
+  }
 
   tags = {
     Name        = "${var.project_name}-task-definition-blue"
@@ -472,11 +487,26 @@ resource "aws_iam_role_policy" "ecs_task_s3_media_green" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:PutObjectAcl", "s3:GetObjectAcl"]
-        Resource = [aws_s3_bucket.media_offload.arn, "${aws_s3_bucket.media_offload.arn}/*"]
+        # Object-level operations
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:PutObjectAcl",
+          "s3:GetObjectAcl"
+        ]
+        Resource = "${aws_s3_bucket.media_offload.arn}/*"
       },
-      { Effect = "Allow", Action = "s3:ListAllMyBuckets", Resource = "*" }
+      {
+        # Bucket-level operations (scoped to specific bucket only)
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = aws_s3_bucket.media_offload.arn
+      }
     ]
   })
 }
@@ -548,6 +578,14 @@ resource "aws_ecs_task_definition" "green" {
         }
       ]
 
+      mountPoints = [
+        {
+          sourceVolume  = "efs-wordpress-green"
+          containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -558,6 +596,15 @@ resource "aws_ecs_task_definition" "green" {
       }
     }
   ])
+
+  volume {
+    name = "efs-wordpress-green"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.green.id
+      transit_encryption = "ENABLED"
+    }
+  }
 
   tags = {
     Name        = "${var.project_name}-task-definition-green"

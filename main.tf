@@ -129,17 +129,6 @@ module "wordpress" {
   wp_username = var.wp_username
   wp_password = var.wp_password
 
-  # CloudFront Configuration
-  cloudfront_price_class        = var.cloudfront_price_class
-  cloudfront_default_ttl        = var.cloudfront_default_ttl
-  cloudfront_max_ttl            = var.cloudfront_max_ttl
-  cloudfront_static_ttl         = var.cloudfront_static_ttl
-  cloudfront_log_retention_days = var.cloudfront_log_retention_days
-
-  # WAF Configuration
-  waf_rate_limit         = var.waf_rate_limit
-  waf_log_retention_days = var.waf_log_retention_days
-
   # Route53 Configuration
   route53_zone_id     = var.route53_zone_id
   route53_domain_name = var.route53_domain_name
