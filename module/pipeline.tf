@@ -52,8 +52,8 @@ resource "aws_iam_role_policy" "codepipeline" {
           "codebuild:StartBuild"
         ]
         Resource = [
-          aws_codebuild_project.source_check[0].arn,
-          aws_codebuild_project.docker_build[0].arn
+          aws_codebuild_project.docker_build[0].arn,
+          aws_codebuild_project.efs_sync[0].arn
         ]
       },
       {
@@ -99,23 +99,6 @@ resource "aws_codepipeline" "main" {
   }
 
   stage {
-    name = "CheckStructure"
-
-    action {
-      name            = "CheckStructure"
-      category        = "Build"
-      owner           = "AWS"
-      provider        = "CodeBuild"
-      input_artifacts = ["usa-pipeline-source_output"]
-      version         = "1"
-
-      configuration = {
-        ProjectName = aws_codebuild_project.source_check[0].name
-      }
-    }
-  }
-
-  stage {
     name = "Build"
 
     action {
@@ -129,6 +112,23 @@ resource "aws_codepipeline" "main" {
 
       configuration = {
         ProjectName = aws_codebuild_project.docker_build[0].name
+      }
+    }
+  }
+
+  stage {
+    name = "SyncEFS"
+
+    action {
+      name            = "SyncEFS"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      input_artifacts = ["build_output"]
+      version         = "1"
+
+      configuration = {
+        ProjectName = aws_codebuild_project.efs_sync[0].name
       }
     }
   }

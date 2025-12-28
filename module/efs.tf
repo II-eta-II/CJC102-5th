@@ -56,20 +56,20 @@ resource "aws_efs_mount_target" "main" {
 }
 
 # EFS Access Point for ECS - Blue
-# Bitnami containers run as UID 1001 (daemon user)
+# WordPress official containers run as UID 33 (www-data)
 resource "aws_efs_access_point" "ecs" {
   file_system_id = aws_efs_file_system.main.id
 
   posix_user {
-    uid = 1001
-    gid = 1001
+    uid = 33
+    gid = 33
   }
 
   root_directory {
-    path = "/bitnami"
+    path = "/wp-content"
     creation_info {
-      owner_uid   = 1001
-      owner_gid   = 1001
+      owner_uid   = 33
+      owner_gid   = 33
       permissions = "0755"
     }
   }
@@ -112,15 +112,15 @@ resource "aws_efs_access_point" "green" {
   file_system_id = aws_efs_file_system.green.id
 
   posix_user {
-    uid = 1001
-    gid = 1001
+    uid = 33
+    gid = 33
   }
 
   root_directory {
-    path = "/bitnami"
+    path = "/wp-content"
     creation_info {
-      owner_uid   = 1001
-      owner_gid   = 1001
+      owner_uid   = 33
+      owner_gid   = 33
       permissions = "0755"
     }
   }

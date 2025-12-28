@@ -325,6 +325,10 @@ resource "aws_ecs_task_definition" "main" {
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.main.id
       transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.ecs.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -372,6 +376,10 @@ resource "aws_ecs_service" "main" {
     aws_efs_mount_target.main,
     aws_lb_listener.http
   ]
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 # Application Auto Scaling Target
@@ -639,6 +647,10 @@ resource "aws_ecs_task_definition" "green" {
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.green.id
       transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.green.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -680,6 +692,10 @@ resource "aws_ecs_service" "green" {
   }
 
   depends_on = [aws_iam_role_policy_attachment.ecs_task_execution, aws_efs_mount_target.green, aws_lb_listener.http]
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 resource "aws_appautoscaling_target" "ecs_green" {

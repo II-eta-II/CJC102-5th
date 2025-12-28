@@ -250,6 +250,11 @@ resource "aws_codebuild_project" "docker_build" {
     }
 
     environment_variable {
+      name  = "ECR_REPOSITORY_NAME"
+      value = aws_ecr_repository.wordpress.name
+    }
+
+    environment_variable {
       name  = "ECS_CLUSTER_NAME"
       value = aws_ecs_cluster.main.name
     }
@@ -323,14 +328,14 @@ resource "aws_codebuild_project" "docker_build" {
 }
 
 # -----------------------------------------------------------------------------
-# CodeBuild Project for Source Structure Check
+# CodeBuild Project for EFS Sync
 # -----------------------------------------------------------------------------
 
-resource "aws_codebuild_project" "source_check" {
+resource "aws_codebuild_project" "efs_sync" {
   count         = var.enable_cicd ? 1 : 0
-  name          = "${var.project_name}-source-check"
-  description   = "Verify file structure of the source code"
-  build_timeout = 5
+  name          = "${var.project_name}-efs-sync"
+  description   = "Sync wp-content to EFS"
+  build_timeout = 15
   service_role  = aws_iam_role.codebuild[0].arn
 
   artifacts {
@@ -342,11 +347,7 @@ resource "aws_codebuild_project" "source_check" {
     image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
     type                        = "LINUX_CONTAINER"
     image_pull_credentials_type = "CODEBUILD"
-
-    environment_variable {
-      name  = "ECR_REPOSITORY_NAME"
-      value = aws_ecr_repository.wordpress.name
-    }
+    privileged_mode             = true
 
     environment_variable {
       name  = "AWS_REGION"
@@ -354,31 +355,137 @@ resource "aws_codebuild_project" "source_check" {
     }
 
     environment_variable {
+      name  = "BLUE_TG_ARN"
+      value = aws_lb_target_group.ecs.arn
+    }
+
+    environment_variable {
+      name  = "GREEN_TG_ARN"
+      value = aws_lb_target_group.ecs_green.arn
+    }
+
+    environment_variable {
+      name  = "LISTENER_ARN"
+      value = aws_lb_listener.https.arn
+    }
+
+    environment_variable {
+      name  = "ECR_REPOSITORY_URI"
+      value = aws_ecr_repository.wordpress.repository_url
+    }
+
+    environment_variable {
       name  = "ECS_CLUSTER_NAME"
-      value = var.ecs_cluster_name
+      value = aws_ecs_cluster.main.name
     }
 
     environment_variable {
       name  = "BLUE_SERVICE_NAME"
-      value = "${var.project_name}-${terraform.workspace}-wordpress-service-blue"
+      value = aws_ecs_service.main.name
     }
 
     environment_variable {
       name  = "GREEN_SERVICE_NAME"
-      value = "${var.project_name}-${terraform.workspace}-wordpress-service-green"
+      value = aws_ecs_service.green.name
+    }
+
+    environment_variable {
+      name  = "BLUE_TASK_FAMILY"
+      value = aws_ecs_task_definition.main.family
+    }
+
+    environment_variable {
+      name  = "GREEN_TASK_FAMILY"
+      value = aws_ecs_task_definition.green.family
     }
   }
 
+  vpc_config {
+    vpc_id             = aws_vpc.main.id
+    subnets            = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.efs.id]
+  }
+
+  file_system_locations {
+    identifier  = "blue_efs"
+    location    = "${aws_efs_file_system.main.id}.efs.${var.aws_region}.amazonaws.com:/"
+    mount_point = "/mnt/efs_blue"
+    type        = "EFS"
+  }
+
+  file_system_locations {
+    identifier  = "green_efs"
+    location    = "${aws_efs_file_system.green.id}.efs.${var.aws_region}.amazonaws.com:/"
+    mount_point = "/mnt/efs_green"
+    type        = "EFS"
+  }
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = file("${path.module}/buildspecs/source_check.yaml")
+    buildspec = file("${path.module}/buildspecs/efs_sync.yaml")
   }
 
   tags = {
-    Name = "${var.project_name}-source-check"
+    Name = "${var.project_name}-efs-sync"
   }
 }
+
+# -----------------------------------------------------------------------------
+# CodeBuild Project for Source Structure Check (DISABLED - no longer used)
+# -----------------------------------------------------------------------------
+
+# resource "aws_codebuild_project" "source_check" {
+#   count         = var.enable_cicd ? 1 : 0
+#   name          = "${var.project_name}-source-check"
+#   description   = "Verify file structure of the source code"
+#   build_timeout = 5
+#   service_role  = aws_iam_role.codebuild[0].arn
+#
+#   artifacts {
+#     type = "CODEPIPELINE"
+#   }
+#
+#   environment {
+#     compute_type                = "BUILD_GENERAL1_SMALL"
+#     image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+#     type                        = "LINUX_CONTAINER"
+#     image_pull_credentials_type = "CODEBUILD"
+#
+#     environment_variable {
+#       name  = "ECR_REPOSITORY_NAME"
+#       value = aws_ecr_repository.wordpress.name
+#     }
+#
+#     environment_variable {
+#       name  = "AWS_REGION"
+#       value = var.aws_region
+#     }
+#
+#     environment_variable {
+#       name  = "ECS_CLUSTER_NAME"
+#       value = var.ecs_cluster_name
+#     }
+#
+#     environment_variable {
+#       name  = "BLUE_SERVICE_NAME"
+#       value = "${var.project_name}-${terraform.workspace}-wordpress-service-blue"
+#     }
+#
+#     environment_variable {
+#       name  = "GREEN_SERVICE_NAME"
+#       value = "${var.project_name}-${terraform.workspace}-wordpress-service-green"
+#     }
+#   }
+#
+#   source {
+#     type      = "CODEPIPELINE"
+#     buildspec = file("${path.module}/buildspecs/source_check.yaml")
+#   }
+#
+#   tags = {
+#     Name = "${var.project_name}-source-check"
+#   }
+# }
 
 # -----------------------------------------------------------------------------
 # Outputs
