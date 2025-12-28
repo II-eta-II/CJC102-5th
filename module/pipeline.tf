@@ -51,7 +51,10 @@ resource "aws_iam_role_policy" "codepipeline" {
           "codebuild:BatchGetBuilds",
           "codebuild:StartBuild"
         ]
-        Resource = aws_codebuild_project.docker_build[0].arn
+        Resource = [
+          aws_codebuild_project.source_check[0].arn,
+          aws_codebuild_project.docker_build[0].arn
+        ]
       },
       {
         Effect   = "Allow"
@@ -85,12 +88,29 @@ resource "aws_codepipeline" "main" {
       owner            = "AWS"
       provider         = "CodeStarSourceConnection"
       version          = "1"
-      output_artifacts = ["source_output"]
+      output_artifacts = ["usa-pipeline-source_output"]
 
       configuration = {
         ConnectionArn    = aws_codestarconnections_connection.github[0].arn
         FullRepositoryId = "${var.github_repo_owner}/${var.github_repo_name}"
         BranchName       = var.github_branch
+      }
+    }
+  }
+
+  stage {
+    name = "CheckStructure"
+
+    action {
+      name            = "CheckStructure"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      input_artifacts = ["usa-pipeline-source_output"]
+      version         = "1"
+
+      configuration = {
+        ProjectName = aws_codebuild_project.source_check[0].name
       }
     }
   }
@@ -103,7 +123,7 @@ resource "aws_codepipeline" "main" {
       category         = "Build"
       owner            = "AWS"
       provider         = "CodeBuild"
-      input_artifacts  = ["source_output"]
+      input_artifacts  = ["usa-pipeline-source_output"]
       output_artifacts = ["build_output"]
       version          = "1"
 

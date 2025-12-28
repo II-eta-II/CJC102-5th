@@ -33,6 +33,12 @@ variable "github_branch" {
   default     = "main"
 }
 
+variable "pipeline_notification_email" {
+  description = "Email address for pipeline failure notifications"
+  type        = string
+  default     = ""
+}
+
 
 
 # -----------------------------------------------------------------------------
@@ -119,10 +125,20 @@ resource "aws_iam_role_policy" "codebuild" {
           "ecr:PutImage",
           "ecr:UploadLayerPart",
           "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:DescribeImages",
+          "ecr:ListImages"
         ]
         Resource = "*"
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeServices"
+        ]
+        Resource = "*"
+      },
+
       {
         Effect = "Allow"
         Action = [
@@ -131,6 +147,38 @@ resource "aws_iam_role_policy" "codebuild" {
           "s3:PutObject"
         ]
         Resource = "${aws_s3_bucket.codepipeline_artifacts[0].arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "codebuild:CreateLogGroup",
+          "codebuild:CreateLogStream",
+          "codebuild:PutLogEvents"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:DescribeMountTargets"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeDhcpOptions",
+          "ec2:DescribeVpcs",
+          "ec2:CreateNetworkInterfacePermission"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -177,39 +225,109 @@ resource "aws_codebuild_project" "docker_build" {
       name  = "IMAGE_TAG"
       value = "latest"
     }
+
+    environment_variable {
+      name  = "ECS_CLUSTER_NAME"
+      value = var.ecs_cluster_name
+    }
+
+    environment_variable {
+      name  = "BLUE_SERVICE_NAME"
+      value = "${var.project_name}-${terraform.workspace}-wordpress-service-blue"
+    }
+
+    environment_variable {
+      name  = "GREEN_SERVICE_NAME"
+      value = "${var.project_name}-${terraform.workspace}-wordpress-service-green"
+    }
+  }
+
+  vpc_config {
+    vpc_id             = aws_vpc.main.id
+    subnets            = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.efs.id]
+  }
+
+  file_system_locations {
+    identifier  = "blue_efs"
+    location    = "${aws_efs_file_system.main.id}.efs.${var.aws_region}.amazonaws.com:/"
+    mount_point = "/mnt/efs_blue"
+    type        = "EFS"
+  }
+
+  file_system_locations {
+    identifier  = "green_efs"
+    location    = "${aws_efs_file_system.green.id}.efs.${var.aws_region}.amazonaws.com:/"
+    mount_point = "/mnt/efs_green"
+    type        = "EFS"
   }
 
   source {
     type      = "CODEPIPELINE"
-    buildspec = <<-EOF
-      version: 0.2
-      phases:
-        pre_build:
-          commands:
-            - echo Logging in to Amazon ECR...
-            - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-        build:
-          commands:
-            - echo Build started on `date`
-            - echo Building the Docker image...
-            - docker build -t $ECR_REPOSITORY_URI:$IMAGE_TAG .
-            - docker tag $ECR_REPOSITORY_URI:$IMAGE_TAG $ECR_REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-        post_build:
-          commands:
-            - echo Build completed on `date`
-            - echo Pushing the Docker image...
-            - docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
-            - docker push $ECR_REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
-            - echo Writing image definitions file...
-            - printf '[{"name":"wordpress","imageUri":"%s"}]' $ECR_REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
-      artifacts:
-        files:
-          - imagedefinitions.json
-    EOF
+    buildspec = file("${path.module}/buildspecs/docker_build.yaml")
+
   }
 
   tags = {
     Name = "${var.project_name}-docker-build"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# CodeBuild Project for Source Structure Check
+# -----------------------------------------------------------------------------
+
+resource "aws_codebuild_project" "source_check" {
+  count         = var.enable_cicd ? 1 : 0
+  name          = "${var.project_name}-source-check"
+  description   = "Verify file structure of the source code"
+  build_timeout = 5
+  service_role  = aws_iam_role.codebuild[0].arn
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+    type                        = "LINUX_CONTAINER"
+    image_pull_credentials_type = "CODEBUILD"
+
+    environment_variable {
+      name  = "ECR_REPOSITORY_NAME"
+      value = aws_ecr_repository.wordpress.name
+    }
+
+    environment_variable {
+      name  = "AWS_REGION"
+      value = var.aws_region
+    }
+
+    environment_variable {
+      name  = "ECS_CLUSTER_NAME"
+      value = var.ecs_cluster_name
+    }
+
+    environment_variable {
+      name  = "BLUE_SERVICE_NAME"
+      value = "${var.project_name}-${terraform.workspace}-wordpress-service-blue"
+    }
+
+    environment_variable {
+      name  = "GREEN_SERVICE_NAME"
+      value = "${var.project_name}-${terraform.workspace}-wordpress-service-green"
+    }
+  }
+
+
+  source {
+    type      = "CODEPIPELINE"
+    buildspec = file("${path.module}/buildspecs/source_check.yaml")
+  }
+
+  tags = {
+    Name = "${var.project_name}-source-check"
   }
 }
 

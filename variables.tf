@@ -300,3 +300,8 @@ variable "github_branch" {
   default     = "main"
 }
 
+variable "pipeline_notification_email" {
+  description = "Email address for pipeline failure notifications"
+  type        = string
+  default     = ""
+}

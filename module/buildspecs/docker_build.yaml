@@ -1,0 +1,55 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - echo "=== Logging in to Amazon ECR ==="
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+  build:
+    commands:
+      - echo "=== Determining Blue-Green Deployment Target ==="
+      - BLUE_COUNT=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $BLUE_SERVICE_NAME --region $AWS_REGION --query 'services[0].desiredCount' --output text 2>/dev/null || echo "0")
+      - echo "Blue service desired count $BLUE_COUNT"
+      - |
+        if [ "$BLUE_COUNT" -gt 0 ]; then
+          export DEPLOYMENT_TARGET="green"
+          export EFS_MOUNT="/mnt/efs_green"
+          echo "Blue is active, deploying to GREEN environment"
+        else
+          export DEPLOYMENT_TARGET="blue"
+          export EFS_MOUNT="/mnt/efs_blue"
+          echo "Green is active, deploying to BLUE environment"
+        fi
+      - echo "Deployment target $DEPLOYMENT_TARGET"
+      - echo "EFS mount point $EFS_MOUNT"
+      - echo "=== Reading VERSION file for image tag ==="
+      - export VERSION_TAG=$(cat VERSION | tr -d '\n\r ')
+      - echo "Using image tag $VERSION_TAG"
+      - echo "=== Build started on $(date) ==="
+      - echo "Building the Docker image..."
+      - docker build -t $ECR_REPOSITORY_URI:$VERSION_TAG .
+      - docker tag $ECR_REPOSITORY_URI:$VERSION_TAG $ECR_REPOSITORY_URI:latest
+      # Uncomment below to also tag with Git commit hash for traceability
+      # - docker tag $ECR_REPOSITORY_URI:$VERSION_TAG $ECR_REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+  post_build:
+    commands:
+      - echo "=== Build completed on $(date) ==="
+      - docker images
+      - echo "Pushing the Docker images..."
+      - docker push $ECR_REPOSITORY_URI:$VERSION_TAG
+      - docker push $ECR_REPOSITORY_URI:latest
+      # Uncomment below to also push Git commit hash tag
+      # - docker push $ECR_REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "Writing image definitions file..."
+      - printf '[{"name":"wordpress","imageUri":"%s"}]' $ECR_REPOSITORY_URI:$VERSION_TAG > imagedefinitions.json
+      - echo "=== Syncing wp-content to EFS ==="
+      - echo "Creating EFS directory structure if needed"
+      - mkdir -p $EFS_MOUNT/wordpress/wp-content
+      - echo "Clearing target EFS directory $EFS_MOUNT/wordpress/wp-content"
+      - rm -rf $EFS_MOUNT/wordpress/wp-content/*
+      - echo "Copying wp-content from source to EFS"
+      - test -d ./wp-content && cp -r ./wp-content/* $EFS_MOUNT/wordpress/wp-content/ || echo "No wp-content directory found in source"
+      - echo "EFS sync complete"
+      - ls -la $EFS_MOUNT/wordpress/wp-content/ || echo "Unable to list directory contents"
+artifacts:
+  files:
+    - imagedefinitions.json

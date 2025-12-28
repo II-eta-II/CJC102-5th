@@ -147,8 +147,9 @@ module "wordpress" {
   green_weight            = var.green_weight
 
   # CI/CD Configuration
-  enable_cicd       = var.enable_cicd
-  github_repo_owner = var.github_repo_owner
-  github_repo_name  = var.github_repo_name
-  github_branch     = var.github_branch
+  enable_cicd                 = var.enable_cicd
+  github_repo_owner           = var.github_repo_owner
+  github_repo_name            = var.github_repo_name
+  github_branch               = var.github_branch
+  pipeline_notification_email = var.pipeline_notification_email
 }
