@@ -68,45 +68,7 @@ resource "aws_acm_certificate_validation" "main" {
 #   }
 # }
 
-# ========================================
-# CloudFront ACM Certificate (us-east-1)
-# CloudFront requires certificates in us-east-1
-# ========================================
-
-# ACM Certificate for CloudFront (must be in us-east-1)
-resource "aws_acm_certificate" "cloudfront" {
-  provider          = aws.us_east_1
-  domain_name       = "${var.subdomain}.${local.route53_domain_name}"
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-cloudfront-acm-cert"
-  }
-}
-
-# DNS Validation Record for CloudFront ACM (single domain)
-resource "aws_route53_record" "cloudfront_acm_validation" {
-  provider        = aws.route53
-  allow_overwrite = true
-  name            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_name
-  records         = [tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_value]
-  ttl             = 60
-  type            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_type
-  zone_id         = local.route53_zone_id
-}
-
-# CloudFront ACM Certificate Validation
-resource "aws_acm_certificate_validation" "cloudfront" {
-  provider                = aws.us_east_1
-  certificate_arn         = aws_acm_certificate.cloudfront.arn
-  validation_record_fqdns = [aws_route53_record.cloudfront_acm_validation.fqdn]
-}
-
-# Route53 A Record for subdomain -> ALB (bypassing CloudFront and WAF)
+# Route53 A Record for subdomain -> ALB
 resource "aws_route53_record" "entry_point" {
   provider = aws.route53
   zone_id  = local.route53_zone_id

@@ -73,12 +73,6 @@ resource "aws_lb_target_group" "ecs" {
     matcher             = "200-399"
   }
 
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
-  }
-
   deregistration_delay = 30
 
   lifecycle {
@@ -126,11 +120,14 @@ resource "aws_lb_listener" "https" {
         arn    = aws_lb_target_group.ecs_green.arn
         weight = var.green_weight
       }
-      stickiness {
-        enabled  = true
-        duration = 3600
-      }
     }
+  }
+
+  # Ignore manual weight adjustments made via AWS Console or CLI
+  lifecycle {
+    ignore_changes = [
+      default_action[0].forward[0].target_group
+    ]
   }
 }
 
@@ -140,8 +137,18 @@ resource "aws_lb_listener_rule" "blue_subdomain" {
   priority     = 10
 
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs.arn
+    type = "forward"
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.ecs.arn
+        weight = 100
+      }
+      # Enable stickiness for Blue subdomain
+      stickiness {
+        enabled  = true
+        duration = 86400 # 24 hours
+      }
+    }
   }
 
   condition {
@@ -157,8 +164,18 @@ resource "aws_lb_listener_rule" "green_subdomain" {
   priority     = 20
 
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs_green.arn
+    type = "forward"
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.ecs_green.arn
+        weight = 100
+      }
+      # Enable stickiness for Green subdomain
+      stickiness {
+        enabled  = true
+        duration = 86400 # 24 hours
+      }
+    }
   }
 
   condition {
@@ -188,12 +205,6 @@ resource "aws_lb_target_group" "ecs_green" {
     path                = "/"
     protocol            = "HTTP"
     matcher             = "200-399"
-  }
-
-  stickiness {
-    type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
   }
 
   deregistration_delay = 30

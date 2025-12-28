@@ -41,7 +41,27 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Policy for Secrets Manager access (required for secrets in task definition)
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name = "${var.project_name}-ecs-task-execution-secrets-policy"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.wordpress_env.arn
+      }
+    ]
+  })
+}
+
 # IAM Role for ECS Task (application permissions)
+
 resource "aws_iam_role" "ecs_task" {
   name = "${var.project_name}-ecs-task-role"
 
@@ -97,24 +117,28 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
     Version = "2012-10-17"
     Statement = [
       {
-        # Bucket-level operations
+        # Object-level operations
         Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
           "s3:PutObjectAcl",
           "s3:GetObjectAcl"
         ]
-        Resource = [
-          aws_s3_bucket.media_offload.arn,
-          "${aws_s3_bucket.media_offload.arn}/*"
-        ]
+        Resource = "${aws_s3_bucket.media_offload.arn}/*"
       },
       {
-        # Required by WordPress Offload Media Lite to list buckets
+        # Bucket-level operations (scoped to specific bucket only)
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = aws_s3_bucket.media_offload.arn
+      },
+      {
+        # Required by WordPress plugins to list buckets in UI
         Effect   = "Allow"
         Action   = "s3:ListAllMyBuckets"
         Resource = "*"
@@ -233,22 +257,6 @@ resource "aws_ecs_task_definition" "main" {
           value = var.db_name
         },
         {
-          name  = "WORDPRESS_DB_USER"
-          value = var.db_username
-        },
-        {
-          name  = "WORDPRESS_DB_PASSWORD"
-          value = var.db_password
-        },
-        {
-          name  = "WORDPRESS_USERNAME"
-          value = var.wp_username
-        },
-        {
-          name  = "WORDPRESS_PASSWORD"
-          value = var.wp_password
-        },
-        {
           name  = "WORDPRESS_CONFIG_EXTRA"
           value = <<-EOT
             // 修正反向代理下的 HTTPS 偵測
@@ -265,6 +273,41 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
 
+      secrets = [
+        {
+          name      = "WORDPRESS_DB_USER"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:db_username::"
+        },
+        {
+          name      = "WORDPRESS_DB_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:db_password::"
+        },
+        {
+          name      = "WORDPRESS_USERNAME"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_username::"
+        },
+        {
+          name      = "WORDPRESS_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_password::"
+        }
+      ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
+      mountPoints = [
+        {
+          sourceVolume  = "efs-wordpress"
+          containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -275,6 +318,15 @@ resource "aws_ecs_task_definition" "main" {
       }
     }
   ])
+
+  volume {
+    name = "efs-wordpress"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+    }
+  }
 
   tags = {
     Name        = "${var.project_name}-task-definition-blue"
@@ -377,6 +429,10 @@ resource "aws_cloudwatch_log_group" "ecs_green" {
   }
 }
 
+# =============================================================================
+# Green Environment - Security Groups
+# =============================================================================
+
 resource "aws_security_group" "ecs_tasks_green" {
   name        = "${var.project_name}-ecs-tasks-green-sg"
   description = "Security group for Green ECS tasks"
@@ -449,11 +505,32 @@ resource "aws_iam_role_policy" "ecs_task_s3_media_green" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:PutObjectAcl", "s3:GetObjectAcl"]
-        Resource = [aws_s3_bucket.media_offload.arn, "${aws_s3_bucket.media_offload.arn}/*"]
+        # Object-level operations
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:PutObjectAcl",
+          "s3:GetObjectAcl"
+        ]
+        Resource = "${aws_s3_bucket.media_offload.arn}/*"
       },
-      { Effect = "Allow", Action = "s3:ListAllMyBuckets", Resource = "*" }
+      {
+        # Bucket-level operations (scoped to specific bucket only)
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = aws_s3_bucket.media_offload.arn
+      },
+      {
+        # Required by WordPress plugins to list buckets in UI
+        Effect   = "Allow"
+        Action   = "s3:ListAllMyBuckets"
+        Resource = "*"
+      }
     ]
   })
 }
@@ -490,22 +567,6 @@ resource "aws_ecs_task_definition" "green" {
           value = var.db_name
         },
         {
-          name  = "WORDPRESS_DB_USER"
-          value = var.db_username
-        },
-        {
-          name  = "WORDPRESS_DB_PASSWORD"
-          value = var.db_password
-        },
-        {
-          name  = "WORDPRESS_USERNAME"
-          value = var.wp_username
-        },
-        {
-          name  = "WORDPRESS_PASSWORD"
-          value = var.wp_password
-        },
-        {
           name  = "WORDPRESS_CONFIG_EXTRA"
           value = <<-EOT
             // 修正反向代理下的 HTTPS 偵測
@@ -520,7 +581,41 @@ resource "aws_ecs_task_definition" "green" {
             }
           EOT
         }
+      ]
 
+      secrets = [
+        {
+          name      = "WORDPRESS_DB_USER"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:db_username::"
+        },
+        {
+          name      = "WORDPRESS_DB_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:db_password::"
+        },
+        {
+          name      = "WORDPRESS_USERNAME"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_username::"
+        },
+        {
+          name      = "WORDPRESS_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_password::"
+        }
+      ]
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
+      mountPoints = [
+        {
+          sourceVolume  = "efs-wordpress-green"
+          containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        }
       ]
 
       logConfiguration = {
@@ -533,6 +628,15 @@ resource "aws_ecs_task_definition" "green" {
       }
     }
   ])
+
+  volume {
+    name = "efs-wordpress-green"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.green.id
+      transit_encryption = "ENABLED"
+    }
+  }
 
   tags = {
     Name        = "${var.project_name}-task-definition-green"
