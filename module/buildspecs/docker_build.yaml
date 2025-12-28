@@ -7,20 +7,46 @@ phases:
   build:
     commands:
       - echo "=== Determining Blue-Green Deployment Target ==="
-      - BLUE_COUNT=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $BLUE_SERVICE_NAME --region $AWS_REGION --query 'services[0].desiredCount' --output text 2>/dev/null || echo "0")
-      - echo "Blue service desired count $BLUE_COUNT"
+      - echo "Blue TG ARN $BLUE_TG_ARN"
+      - echo "Green TG ARN $GREEN_TG_ARN"
+      - echo "Listener ARN $LISTENER_ARN"
       - |
-        if [ "$BLUE_COUNT" -gt 0 ]; then
-          export DEPLOYMENT_TARGET="green"
-          export EFS_MOUNT="/mnt/efs_green"
-          echo "Blue is active, deploying to GREEN environment"
-        else
+        # Query default rule weights
+        WEIGHTS=$(aws elbv2 describe-rules --listener-arn $LISTENER_ARN --region $AWS_REGION --query 'Rules[?IsDefault==`true`].Actions[0].ForwardConfig.TargetGroups[*].[TargetGroupArn,Weight]' --output text)
+        echo "Target group weights:"
+        echo "$WEIGHTS"
+        
+        # Parse weights for blue and green
+        BLUE_WEIGHT=$(echo "$WEIGHTS" | grep "$BLUE_TG_ARN" | awk '{print $2}')
+        GREEN_WEIGHT=$(echo "$WEIGHTS" | grep "$GREEN_TG_ARN" | awk '{print $2}')
+        
+        echo "Blue weight: $BLUE_WEIGHT"
+        echo "Green weight: $GREEN_WEIGHT"
+        
+        # Handle empty values
+        if [ -z "$BLUE_WEIGHT" ]; then BLUE_WEIGHT=0; fi
+        if [ -z "$GREEN_WEIGHT" ]; then GREEN_WEIGHT=0; fi
+        
+        # Determine deployment target (deploy to the one with weight 0)
+        if [ "$BLUE_WEIGHT" -eq 0 ] && [ "$GREEN_WEIGHT" -gt 0 ]; then
           export DEPLOYMENT_TARGET="blue"
           export EFS_MOUNT="/mnt/efs_blue"
-          echo "Green is active, deploying to BLUE environment"
+          export TASK_FAMILY="$BLUE_TASK_FAMILY"
+          echo "Blue has 0 weight, deploying to BLUE environment"
+        elif [ "$GREEN_WEIGHT" -eq 0 ] && [ "$BLUE_WEIGHT" -gt 0 ]; then
+          export DEPLOYMENT_TARGET="green"
+          export EFS_MOUNT="/mnt/efs_green"
+          export TASK_FAMILY="$GREEN_TASK_FAMILY"
+          echo "Green has 0 weight, deploying to GREEN environment"
+        else
+          echo "ERROR: Both environments have non-zero weights or both are zero!"
+          echo "Blue weight: $BLUE_WEIGHT, Green weight: $GREEN_WEIGHT"
+          echo "Cannot determine deployment target. Please ensure one environment has 0 weight."
+          exit 1
         fi
       - echo "Deployment target $DEPLOYMENT_TARGET"
       - echo "EFS mount point $EFS_MOUNT"
+      - echo "Task family $TASK_FAMILY"
       - echo "=== Reading VERSION file for image tag ==="
       - export VERSION_TAG=$(cat VERSION | tr -d '\n\r ')
       - echo "Using image tag $VERSION_TAG"
@@ -41,6 +67,23 @@ phases:
       # - docker push $ECR_REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
       - echo "Writing image definitions file..."
       - printf '[{"name":"wordpress","imageUri":"%s"}]' $ECR_REPOSITORY_URI:$VERSION_TAG > imagedefinitions.json
+      - echo "=== Updating ECS Task Definition Image ==="
+      - echo "Updating task family $TASK_FAMILY"
+      - TASK_DEF=$(aws ecs describe-task-definition --task-definition $TASK_FAMILY --region $AWS_REGION)
+      - NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$ECR_REPOSITORY_URI:$VERSION_TAG" '.taskDefinition | .containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+      - echo "Registering new task definition..."
+      - NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF" --region $AWS_REGION --query 'taskDefinition.taskDefinitionArn' --output text)
+      - echo "New task definition ARN $NEW_TASK_DEF_ARN"
+      - echo "=== Updating ECS Service ==="
+      - |
+        if [ "$DEPLOYMENT_TARGET" = "blue" ]; then
+          SERVICE_NAME="wordpress-service-blue"
+        else
+          SERVICE_NAME="wordpress-service-green"
+        fi
+      - echo "Updating service $SERVICE_NAME to use new task definition"
+      - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $SERVICE_NAME --task-definition $NEW_TASK_DEF_ARN --region $AWS_REGION
+      - echo "Service updated successfully"
       - echo "=== Syncing wp-content to EFS ==="
       - echo "Creating EFS directory structure if needed"
       - mkdir -p $EFS_MOUNT/wordpress/wp-content

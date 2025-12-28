@@ -332,6 +332,10 @@ resource "aws_ecs_task_definition" "main" {
     Name        = "${var.project_name}-task-definition-blue"
     Environment = "blue"
   }
+
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
 }
 
 # ECS Service - Blue
@@ -641,6 +645,10 @@ resource "aws_ecs_task_definition" "green" {
   tags = {
     Name        = "${var.project_name}-task-definition-green"
     Environment = "green"
+  }
+
+  lifecycle {
+    ignore_changes = [container_definitions]
   }
 }
 

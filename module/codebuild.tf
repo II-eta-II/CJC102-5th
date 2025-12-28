@@ -134,9 +134,32 @@ resource "aws_iam_role_policy" "codebuild" {
       {
         Effect = "Allow"
         Action = [
-          "ecs:DescribeServices"
+          "ecs:DescribeServices",
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:UpdateService"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeListeners",
+          "elasticloadbalancing:DescribeRules"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.ecs_task.arn,
+          aws_iam_role.ecs_task_green.arn
+        ]
       },
 
       {
@@ -228,21 +251,47 @@ resource "aws_codebuild_project" "docker_build" {
 
     environment_variable {
       name  = "ECS_CLUSTER_NAME"
-      value = var.ecs_cluster_name
+      value = aws_ecs_cluster.main.name
     }
 
     environment_variable {
       name  = "BLUE_SERVICE_NAME"
-      value = "${var.project_name}-${terraform.workspace}-wordpress-service-blue"
+      value = aws_ecs_service.main.name
     }
 
     environment_variable {
       name  = "GREEN_SERVICE_NAME"
-      value = "${var.project_name}-${terraform.workspace}-wordpress-service-green"
+      value = aws_ecs_service.green.name
+    }
+
+    environment_variable {
+      name  = "BLUE_TG_ARN"
+      value = aws_lb_target_group.ecs.arn
+    }
+
+    environment_variable {
+      name  = "GREEN_TG_ARN"
+      value = aws_lb_target_group.ecs_green.arn
+    }
+
+    environment_variable {
+      name  = "LISTENER_ARN"
+      value = aws_lb_listener.https.arn
+    }
+
+    environment_variable {
+      name  = "BLUE_TASK_FAMILY"
+      value = aws_ecs_task_definition.main.family
+    }
+
+    environment_variable {
+      name  = "GREEN_TASK_FAMILY"
+      value = aws_ecs_task_definition.green.family
     }
   }
 
   vpc_config {
+
     vpc_id             = aws_vpc.main.id
     subnets            = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.efs.id]
