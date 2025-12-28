@@ -77,9 +77,9 @@ phases:
       - echo "=== Updating ECS Service ==="
       - |
         if [ "$DEPLOYMENT_TARGET" = "blue" ]; then
-          SERVICE_NAME="wordpress-service-blue"
+          SERVICE_NAME="$BLUE_SERVICE_NAME"
         else
-          SERVICE_NAME="wordpress-service-green"
+          SERVICE_NAME="$GREEN_SERVICE_NAME"
         fi
       - echo "Updating service $SERVICE_NAME to use new task definition"
       - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $SERVICE_NAME --task-definition $NEW_TASK_DEF_ARN --region $AWS_REGION

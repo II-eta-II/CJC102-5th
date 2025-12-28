@@ -131,59 +131,57 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# ALB Listener Rule - Blue subdomain (blue.usa.cjc102.site -> Blue only)
-resource "aws_lb_listener_rule" "blue_subdomain" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 10
+# Temporarily disabled - Blue subdomain listener rule
+# resource "aws_lb_listener_rule" "blue_subdomain" {
+#   listener_arn = aws_lb_listener.https.arn
+#   priority     = 10
+#
+#   action {
+#     type = "forward"
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.ecs.arn
+#         weight = 100
+#       }
+#       stickiness {
+#         enabled  = true
+#         duration = 86400
+#       }
+#     }
+#   }
+#
+#   condition {
+#     host_header {
+#       values = ["blue.${var.subdomain}.${var.route53_domain_name}"]
+#     }
+#   }
+# }
 
-  action {
-    type = "forward"
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs.arn
-        weight = 100
-      }
-      # Enable stickiness for Blue subdomain
-      stickiness {
-        enabled  = true
-        duration = 86400 # 24 hours
-      }
-    }
-  }
-
-  condition {
-    host_header {
-      values = ["blue.${var.subdomain}.${var.route53_domain_name}"]
-    }
-  }
-}
-
-# ALB Listener Rule - Green subdomain (green.usa.cjc102.site -> Green only)
-resource "aws_lb_listener_rule" "green_subdomain" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 20
-
-  action {
-    type = "forward"
-    forward {
-      target_group {
-        arn    = aws_lb_target_group.ecs_green.arn
-        weight = 100
-      }
-      # Enable stickiness for Green subdomain
-      stickiness {
-        enabled  = true
-        duration = 86400 # 24 hours
-      }
-    }
-  }
-
-  condition {
-    host_header {
-      values = ["green.${var.subdomain}.${var.route53_domain_name}"]
-    }
-  }
-}
+# Temporarily disabled - Green subdomain listener rule
+# resource "aws_lb_listener_rule" "green_subdomain" {
+#   listener_arn = aws_lb_listener.https.arn
+#   priority     = 20
+#
+#   action {
+#     type = "forward"
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.ecs_green.arn
+#         weight = 100
+#       }
+#       stickiness {
+#         enabled  = true
+#         duration = 86400
+#       }
+#     }
+#   }
+#
+#   condition {
+#     host_header {
+#       values = ["green.${var.subdomain}.${var.route53_domain_name}"]
+#     }
+#   }
+# }
 
 # =============================================================================
 # Green Environment Target Group (Blue-Green Deployment)
