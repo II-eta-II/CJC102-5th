@@ -54,16 +54,22 @@ variable "ecs_service_name" {
   default     = "wordpress-service"
 }
 
-variable "container_image" {
-  description = "Docker image for the container"
+variable "ecr_repository_name" {
+  description = "ECR repository name for WordPress image"
   type        = string
-  default     = "public.ecr.aws/bitnami/wordpress:latest"
+  default     = "usa-wordpress"
+}
+
+variable "image_tag" {
+  description = "Docker image tag to deploy"
+  type        = string
+  default     = "latest"
 }
 
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number
-  default     = 8080
+  default     = 80
 }
 
 variable "ecs_task_cpu" {
@@ -78,23 +84,7 @@ variable "ecs_task_memory" {
   default     = 2048
 }
 
-variable "ecs_desired_count" {
-  description = "Desired number of ECS tasks"
-  type        = number
-  default     = 2
-}
 
-variable "ecs_min_capacity" {
-  description = "Minimum number of ECS tasks"
-  type        = number
-  default     = 1
-}
-
-variable "ecs_max_capacity" {
-  description = "Maximum number of ECS tasks"
-  type        = number
-  default     = 10
-}
 
 variable "efs_mount_path" {
   description = "Path to mount EFS in container"
@@ -146,50 +136,6 @@ variable "wp_password" {
   sensitive   = true
 }
 
-# CloudFront Configuration
-variable "cloudfront_price_class" {
-  description = "Price class for CloudFront distribution (PriceClass_100, PriceClass_200, PriceClass_All)"
-  type        = string
-  default     = "PriceClass_All"
-}
-
-variable "cloudfront_default_ttl" {
-  description = "Default TTL for CloudFront cache in seconds"
-  type        = number
-  default     = 86400 # 24 hours
-}
-
-variable "cloudfront_max_ttl" {
-  description = "Maximum TTL for CloudFront cache in seconds"
-  type        = number
-  default     = 31536000 # 1 year
-}
-
-variable "cloudfront_static_ttl" {
-  description = "TTL for static assets in CloudFront cache in seconds"
-  type        = number
-  default     = 31536000 # 1 year
-}
-
-variable "cloudfront_log_retention_days" {
-  description = "Number of days to retain CloudFront logs in S3"
-  type        = number
-  default     = 30
-}
-
-# WAF Configuration
-variable "waf_rate_limit" {
-  description = "Rate limit for WAF (requests per 5 minutes per IP)"
-  type        = number
-  default     = 2000
-}
-
-variable "waf_log_retention_days" {
-  description = "Number of days to retain WAF logs in CloudWatch"
-  type        = number
-  default     = 30
-}
-
 # Route53 Configuration
 variable "route53_zone_id" {
   description = "Route53 Hosted Zone ID for ACM certificate DNS validation"
@@ -206,5 +152,69 @@ variable "subdomain" {
   type        = string
 }
 
+# =============================================================================
+# Blue-Green Deployment Configuration
+# =============================================================================
 
+# Blue Environment
+variable "blue_ecs_desired_count" {
+  description = "Desired count for Blue ECS service (0 = standby mode)"
+  type        = number
+  default     = 2
+}
 
+variable "blue_ecs_min_capacity" {
+  description = "Minimum capacity for Blue ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "blue_ecs_max_capacity" {
+  description = "Maximum capacity for Blue ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "blue_image_tag" {
+  description = "Docker image tag for Blue environment"
+  type        = string
+  default     = "latest"
+}
+
+# Green Environment
+variable "green_ecs_desired_count" {
+  description = "Desired count for Green ECS service (0 = standby mode)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_min_capacity" {
+  description = "Minimum capacity for Green ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_max_capacity" {
+  description = "Maximum capacity for Green ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "green_image_tag" {
+  description = "Docker image tag for Green environment"
+  type        = string
+  default     = "latest"
+}
+
+# ALB Traffic Weights
+variable "blue_weight" {
+  description = "Traffic weight for Blue environment (0-100)"
+  type        = number
+  default     = 100
+}
+
+variable "green_weight" {
+  description = "Traffic weight for Green environment (0-100)"
+  type        = number
+  default     = 0
+}

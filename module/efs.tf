@@ -25,9 +25,13 @@ resource "aws_security_group" "efs" {
   }
 }
 
-# EFS File System
+# =============================================================================
+# Blue Environment EFS
+# =============================================================================
+
+# EFS File System - Blue
 resource "aws_efs_file_system" "main" {
-  creation_token = "${var.project_name}-efs"
+  creation_token = "${var.project_name}-efs-blue"
   encrypted      = true
 
   performance_mode = "generalPurpose"
@@ -38,7 +42,8 @@ resource "aws_efs_file_system" "main" {
   }
 
   tags = {
-    Name = "${var.project_name}-efs"
+    Name        = "${var.project_name}-efs-blue"
+    Environment = "blue"
   }
 }
 
@@ -50,26 +55,177 @@ resource "aws_efs_mount_target" "main" {
   security_groups = [aws_security_group.efs.id]
 }
 
-# EFS Access Point for ECS (可選，但建議使用)
-resource "aws_efs_access_point" "ecs" {
+# EFS Access Points for ECS - Blue
+# WordPress official containers run as UID 33 (www-data)
+
+# Access Point for wp-admin
+resource "aws_efs_access_point" "wp_admin" {
   file_system_id = aws_efs_file_system.main.id
 
-  # 移除 posix_user 強制設定，讓容器可以使用 root 權限 (配合 ClientRootAccess)
-  # posix_user {
-  #   uid = 1000
-  #   gid = 1000
-  # }
+  posix_user {
+    uid = 33
+    gid = 33
+  }
 
   root_directory {
-    path = "/ecs"
+    path = "/wp-admin"
     creation_info {
-      owner_uid   = 1000
-      owner_gid   = 1000
-      permissions = "755"
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
     }
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-access-point"
+    Name        = "${var.project_name}-ecs-ap-wp-admin-blue"
+    Environment = "blue"
+  }
+}
+
+# Access Point for wp-content
+resource "aws_efs_access_point" "ecs" {
+  file_system_id = aws_efs_file_system.main.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-content"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-content-blue"
+    Environment = "blue"
+  }
+}
+
+# Access Point for wp-includes
+resource "aws_efs_access_point" "wp_includes" {
+  file_system_id = aws_efs_file_system.main.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-includes"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-includes-blue"
+    Environment = "blue"
+  }
+}
+
+# =============================================================================
+# Green Environment EFS (Blue-Green Deployment)
+# =============================================================================
+
+resource "aws_efs_file_system" "green" {
+  creation_token = "${var.project_name}-efs-green"
+  encrypted      = true
+
+  performance_mode = "generalPurpose"
+  throughput_mode  = "bursting"
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-efs-green"
+    Environment = "green"
+  }
+}
+
+resource "aws_efs_mount_target" "green" {
+  count           = length(var.availability_zones)
+  file_system_id  = aws_efs_file_system.green.id
+  subnet_id       = aws_subnet.private[count.index].id
+  security_groups = [aws_security_group.efs.id]
+}
+
+# Access Point for wp-admin - Green
+resource "aws_efs_access_point" "wp_admin_green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-admin"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-admin-green"
+    Environment = "green"
+  }
+}
+
+# Access Point for wp-content - Green
+resource "aws_efs_access_point" "green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-content"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-content-green"
+    Environment = "green"
+  }
+}
+
+# Access Point for wp-includes - Green
+resource "aws_efs_access_point" "wp_includes_green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-includes"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-includes-green"
+    Environment = "green"
   }
 }

@@ -50,9 +50,13 @@ resource "aws_lb" "main" {
   }
 }
 
-# Target Group for ECS Service
+# =============================================================================
+# Blue Environment Target Group
+# =============================================================================
+
+# Target Group for ECS Service - Blue
 resource "aws_lb_target_group" "ecs" {
-  name_prefix = "ecs-"
+  name_prefix = "blue-"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -76,11 +80,12 @@ resource "aws_lb_target_group" "ecs" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-target-group"
+    Name        = "${var.project_name}-ecs-target-group-blue"
+    Environment = "blue"
   }
 }
 
-# ALB Listener - HTTP (Redirect to HTTPS)
+# ALB Listener - HTTP (with weighted routing for Blue-Green, used by CloudFront)
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -88,7 +93,6 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type = "redirect"
-
     redirect {
       port        = "443"
       protocol    = "HTTPS"
@@ -97,7 +101,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# ALB Listener - HTTPS
+# ALB Listener - HTTPS (with weighted routing for Blue-Green)
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.main.arn
   port              = "443"
@@ -106,8 +110,109 @@ resource "aws_lb_listener" "https" {
   certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.ecs.arn
+    type = "forward"
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.ecs.arn
+        weight = var.blue_weight
+      }
+      target_group {
+        arn    = aws_lb_target_group.ecs_green.arn
+        weight = var.green_weight
+      }
+    }
+  }
+
+  # Ignore manual weight adjustments made via AWS Console or CLI
+  lifecycle {
+    ignore_changes = [
+      default_action[0].forward[0].target_group
+    ]
   }
 }
 
+# Temporarily disabled - Blue subdomain listener rule
+# resource "aws_lb_listener_rule" "blue_subdomain" {
+#   listener_arn = aws_lb_listener.https.arn
+#   priority     = 10
+#
+#   action {
+#     type = "forward"
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.ecs.arn
+#         weight = 100
+#       }
+#       stickiness {
+#         enabled  = true
+#         duration = 86400
+#       }
+#     }
+#   }
+#
+#   condition {
+#     host_header {
+#       values = ["blue.${var.subdomain}.${var.route53_domain_name}"]
+#     }
+#   }
+# }
+
+# Temporarily disabled - Green subdomain listener rule
+# resource "aws_lb_listener_rule" "green_subdomain" {
+#   listener_arn = aws_lb_listener.https.arn
+#   priority     = 20
+#
+#   action {
+#     type = "forward"
+#     forward {
+#       target_group {
+#         arn    = aws_lb_target_group.ecs_green.arn
+#         weight = 100
+#       }
+#       stickiness {
+#         enabled  = true
+#         duration = 86400
+#       }
+#     }
+#   }
+#
+#   condition {
+#     host_header {
+#       values = ["green.${var.subdomain}.${var.route53_domain_name}"]
+#     }
+#   }
+# }
+
+# =============================================================================
+# Green Environment Target Group (Blue-Green Deployment)
+# =============================================================================
+
+resource "aws_lb_target_group" "ecs_green" {
+  name_prefix = "green-"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 20
+    interval            = 60
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+  }
+
+  deregistration_delay = 30
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-target-group-green"
+    Environment = "green"
+  }
+}

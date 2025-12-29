@@ -36,10 +36,13 @@ provider "aws" {
 
   # 使用變數設定預設標籤
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -50,10 +53,13 @@ provider "aws" {
   profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -71,10 +77,13 @@ provider "aws" {
   }
 
   default_tags {
-    tags = {
-      ManagedBy = "Terraform"
-      Project   = var.project_name
-    }
+    tags = merge(
+      {
+        ManagedBy = "Terraform"
+        Project   = var.project_name
+      },
+      var.extra_tags
+    )
   }
 }
 
@@ -101,16 +110,13 @@ module "wordpress" {
   private_subnet_cidrs = var.private_subnet_cidrs
 
   # ECS Configuration
-  ecs_cluster_name  = var.ecs_cluster_name
-  ecs_service_name  = var.ecs_service_name
-  container_image   = var.container_image
-  container_port    = var.container_port
-  ecs_task_cpu      = var.ecs_task_cpu
-  ecs_task_memory   = var.ecs_task_memory
-  ecs_desired_count = var.ecs_desired_count
-  ecs_min_capacity  = var.ecs_min_capacity
-  ecs_max_capacity  = var.ecs_max_capacity
-  efs_mount_path    = var.efs_mount_path
+  ecs_cluster_name    = var.ecs_cluster_name
+  ecs_service_name    = var.ecs_service_name
+  ecr_repository_name = var.ecr_repository_name
+  container_port      = var.container_port
+  ecs_task_cpu        = var.ecs_task_cpu
+  ecs_task_memory     = var.ecs_task_memory
+  efs_mount_path      = var.efs_mount_path
 
   # RDS Configuration
   db_name              = var.db_name
@@ -123,20 +129,27 @@ module "wordpress" {
   wp_username = var.wp_username
   wp_password = var.wp_password
 
-  # CloudFront Configuration
-  cloudfront_price_class        = var.cloudfront_price_class
-  cloudfront_default_ttl        = var.cloudfront_default_ttl
-  cloudfront_max_ttl            = var.cloudfront_max_ttl
-  cloudfront_static_ttl         = var.cloudfront_static_ttl
-  cloudfront_log_retention_days = var.cloudfront_log_retention_days
-
-  # WAF Configuration
-  waf_rate_limit         = var.waf_rate_limit
-  waf_log_retention_days = var.waf_log_retention_days
-
   # Route53 Configuration
   route53_zone_id     = var.route53_zone_id
   route53_domain_name = var.route53_domain_name
   subdomain           = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
-}
 
+  # Blue-Green Deployment Configuration
+  blue_ecs_desired_count  = var.blue_ecs_desired_count
+  blue_ecs_min_capacity   = var.blue_ecs_min_capacity
+  blue_ecs_max_capacity   = var.blue_ecs_max_capacity
+  blue_image_tag          = var.blue_image_tag
+  green_ecs_desired_count = var.green_ecs_desired_count
+  green_ecs_min_capacity  = var.green_ecs_min_capacity
+  green_ecs_max_capacity  = var.green_ecs_max_capacity
+  green_image_tag         = var.green_image_tag
+  blue_weight             = var.blue_weight
+  green_weight            = var.green_weight
+
+  # CI/CD Configuration
+  enable_cicd                 = var.enable_cicd
+  github_repo_owner           = var.github_repo_owner
+  github_repo_name            = var.github_repo_name
+  github_branch               = var.github_branch
+  pipeline_notification_email = var.pipeline_notification_email
+}

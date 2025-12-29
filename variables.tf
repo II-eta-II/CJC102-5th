@@ -16,6 +16,12 @@ variable "project_name" {
   default     = "usa"
 }
 
+variable "extra_tags" {
+  description = "Extra tags to apply to all resources (can be overridden in tfvars)"
+  type        = map(string)
+  default     = {}
+}
+
 # VPC Configuration
 variable "vpc_cidr" {
   description = "CIDR block for VPC"
@@ -54,16 +60,22 @@ variable "ecs_service_name" {
   default     = "wordpress-service"
 }
 
-variable "container_image" {
-  description = "Docker image for the container"
+variable "ecr_repository_name" {
+  description = "ECR repository name for WordPress image"
   type        = string
-  default     = "public.ecr.aws/bitnami/wordpress:latest"
+  default     = "usa-wordpress"
+}
+
+variable "image_tag" {
+  description = "Docker image tag to deploy"
+  type        = string
+  default     = "latest"
 }
 
 variable "container_port" {
-  description = "Port exposed by the container"
+  description = "Port exposed by the container (80 for official WordPress, 8080 for Bitnami)"
   type        = number
-  default     = 8080
+  default     = 80
 }
 
 variable "ecs_task_cpu" {
@@ -78,28 +90,12 @@ variable "ecs_task_memory" {
   default     = 2048
 }
 
-variable "ecs_desired_count" {
-  description = "Desired number of ECS tasks"
-  type        = number
-  default     = 2
-}
 
-variable "ecs_min_capacity" {
-  description = "Minimum number of ECS tasks"
-  type        = number
-  default     = 1
-}
-
-variable "ecs_max_capacity" {
-  description = "Maximum number of ECS tasks"
-  type        = number
-  default     = 10
-}
 
 variable "efs_mount_path" {
-  description = "Path to mount EFS in container"
+  description = "Path to mount EFS in container (Bitnami: /bitnami, Official: /var/www/html)"
   type        = string
-  default     = "/var/www/html/wp-content"
+  default     = "/bitnami"
 }
 
 # RDS Configuration
@@ -209,5 +205,103 @@ variable "subdomain" {
   default     = ""
 }
 
+# =============================================================================
+# Blue-Green Deployment Configuration
+# =============================================================================
 
+# Blue Environment
+variable "blue_ecs_desired_count" {
+  description = "Desired count for Blue ECS service (0 = standby mode)"
+  type        = number
+  default     = 2
+}
 
+variable "blue_ecs_min_capacity" {
+  description = "Minimum capacity for Blue ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "blue_ecs_max_capacity" {
+  description = "Maximum capacity for Blue ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "blue_image_tag" {
+  description = "Docker image tag for Blue environment"
+  type        = string
+  default     = "latest"
+}
+
+# Green Environment
+variable "green_ecs_desired_count" {
+  description = "Desired count for Green ECS service (0 = standby mode)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_min_capacity" {
+  description = "Minimum capacity for Green ECS Auto Scaling (0 = can scale to zero)"
+  type        = number
+  default     = 0
+}
+
+variable "green_ecs_max_capacity" {
+  description = "Maximum capacity for Green ECS Auto Scaling"
+  type        = number
+  default     = 4
+}
+
+variable "green_image_tag" {
+  description = "Docker image tag for Green environment"
+  type        = string
+  default     = "latest"
+}
+
+# ALB Traffic Weights
+variable "blue_weight" {
+  description = "Traffic weight for Blue environment (0-100)"
+  type        = number
+  default     = 100
+}
+
+variable "green_weight" {
+  description = "Traffic weight for Green environment (0-100)"
+  type        = number
+  default     = 0
+}
+
+# =============================================================================
+# CI/CD Configuration
+# =============================================================================
+
+variable "enable_cicd" {
+  description = "Enable CI/CD pipeline for Docker image builds"
+  type        = bool
+  default     = false
+}
+
+variable "github_repo_owner" {
+  description = "GitHub repository owner (user or organization)"
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_name" {
+  description = "GitHub repository name"
+  type        = string
+  default     = ""
+}
+
+variable "github_branch" {
+  description = "GitHub branch to trigger builds"
+  type        = string
+  default     = "main"
+}
+
+variable "pipeline_notification_email" {
+  description = "Email address for pipeline failure notifications"
+  type        = string
+  default     = ""
+}

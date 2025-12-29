@@ -81,22 +81,22 @@ output "ecs_cluster_name" {
 
 output "ecs_service_name" {
   description = "ECS Service Name"
-  value       = aws_ecs_service.main.name
+  value       = aws_ecs_service.blue.name
 }
 
 output "ecs_task_definition_arn" {
   description = "ECS Task Definition ARN"
-  value       = aws_ecs_task_definition.main.arn
+  value       = aws_ecs_task_definition.blue.arn
 }
 
 output "ecs_security_group_id" {
   description = "ECS Tasks Security Group ID"
-  value       = aws_security_group.ecs_tasks.id
+  value       = aws_security_group.blue_ecs_tasks.id
 }
 
 output "ecs_log_group_name" {
   description = "CloudWatch Log Group for ECS"
-  value       = aws_cloudwatch_log_group.ecs.name
+  value       = aws_cloudwatch_log_group.blue_ecs.name
 }
 
 # RDS Outputs
@@ -150,49 +150,42 @@ output "alb_url" {
 }
 
 # S3 Outputs
-output "s3_static_assets_bucket_name" {
-  description = "S3 bucket name for static assets"
-  value       = aws_s3_bucket.static_assets.id
+output "s3_media_offload_bucket_name" {
+  description = "S3 bucket name for WordPress media offload"
+  value       = aws_s3_bucket.media_offload.id
 }
 
-output "s3_static_assets_bucket_arn" {
-  description = "S3 bucket ARN for static assets"
-  value       = aws_s3_bucket.static_assets.arn
+output "s3_media_offload_bucket_arn" {
+  description = "S3 bucket ARN for WordPress media offload"
+  value       = aws_s3_bucket.media_offload.arn
 }
 
-output "s3_cloudfront_logs_bucket_name" {
-  description = "S3 bucket name for CloudFront logs"
-  value       = aws_s3_bucket.cloudfront_logs.id
+# ECR Outputs
+output "ecr_repository_url" {
+  description = "ECR repository URL for WordPress image"
+  value       = aws_ecr_repository.wordpress.repository_url
 }
 
-# WAF Outputs
-output "waf_web_acl_id" {
-  description = "WAF Web ACL ID"
-  value       = aws_wafv2_web_acl.main.id
+# =============================================================================
+# Green Environment Outputs (Blue-Green Deployment)
+# =============================================================================
+
+output "rds_endpoint_green" {
+  description = "RDS endpoint for Green environment"
+  value       = aws_db_instance.green.endpoint
 }
 
-output "waf_web_acl_arn" {
-  description = "WAF Web ACL ARN"
-  value       = aws_wafv2_web_acl.main.arn
+output "efs_id_green" {
+  description = "EFS file system ID for Green environment"
+  value       = aws_efs_file_system.green.id
 }
 
-# CloudFront Outputs
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID"
-  value       = aws_cloudfront_distribution.main.id
+output "ecs_service_name_green" {
+  description = "ECS service name for Green environment"
+  value       = aws_ecs_service.green.name
 }
 
-output "cloudfront_distribution_arn" {
-  description = "CloudFront distribution ARN"
-  value       = aws_cloudfront_distribution.main.arn
-}
-
-output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain name"
-  value       = aws_cloudfront_distribution.main.domain_name
-}
-
-output "cloudfront_url" {
-  description = "URL to access the application via CloudFront"
-  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+output "target_group_arn_green" {
+  description = "Target group ARN for Green environment"
+  value       = aws_lb_target_group.ecs_green.arn
 }

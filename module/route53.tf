@@ -13,7 +13,8 @@ resource "aws_acm_certificate" "main" {
   validation_method = "DNS"
 
   subject_alternative_names = [
-    "*.${local.route53_domain_name}"
+    "*.${local.route53_domain_name}",
+    "*.${var.subdomain}.${local.route53_domain_name}"
   ]
 
   lifecycle {
@@ -52,10 +53,26 @@ resource "aws_acm_certificate_validation" "main" {
 }
 
 # Route53 A Record pointing to ALB (for root domain)
-resource "aws_route53_record" "alb" {
+# 已移除：不建立或修改 root domain (cjc102.site) 的 A 記錄
+# 因為 root domain 可能被其他人使用，我們只使用 subdomain
+# resource "aws_route53_record" "alb" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = local.route53_domain_name
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
+
+# Route53 A Record for subdomain -> ALB
+resource "aws_route53_record" "entry_point" {
   provider = aws.route53
   zone_id  = local.route53_zone_id
-  name     = local.route53_domain_name
+  name     = "${var.subdomain}.${local.route53_domain_name}"
   type     = "A"
 
   alias {
@@ -65,53 +82,30 @@ resource "aws_route53_record" "alb" {
   }
 }
 
-# ========================================
-# CloudFront ACM Certificate (us-east-1)
-# CloudFront requires certificates in us-east-1
-# ========================================
+# Temporarily disabled - Blue subdomain Route53 record
+# resource "aws_route53_record" "blue_subdomain" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = "blue.${var.subdomain}.${local.route53_domain_name}"
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
 
-# ACM Certificate for CloudFront (must be in us-east-1)
-resource "aws_acm_certificate" "cloudfront" {
-  provider          = aws.us_east_1
-  domain_name       = "${var.subdomain}.${local.route53_domain_name}"
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-cloudfront-acm-cert"
-  }
-}
-
-# DNS Validation Record for CloudFront ACM (single domain)
-resource "aws_route53_record" "cloudfront_acm_validation" {
-  provider        = aws.route53
-  allow_overwrite = true
-  name            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_name
-  records         = [tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_value]
-  ttl             = 60
-  type            = tolist(aws_acm_certificate.cloudfront.domain_validation_options)[0].resource_record_type
-  zone_id         = local.route53_zone_id
-}
-
-# CloudFront ACM Certificate Validation
-resource "aws_acm_certificate_validation" "cloudfront" {
-  provider                = aws.us_east_1
-  certificate_arn         = aws_acm_certificate.cloudfront.arn
-  validation_record_fqdns = [aws_route53_record.cloudfront_acm_validation.fqdn]
-}
-
-# Route53 CNAME Record for subdomain -> CloudFront
-resource "aws_route53_record" "entry_point" {
-  provider = aws.route53
-  zone_id  = local.route53_zone_id
-  name     = "${var.subdomain}.${local.route53_domain_name}"
-  type     = "CNAME"
-  ttl      = 300
-  records  = [aws_cloudfront_distribution.main.domain_name]
-}
-
-
-
+# Temporarily disabled - Green subdomain Route53 record
+# resource "aws_route53_record" "green_subdomain" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = "green.${var.subdomain}.${local.route53_domain_name}"
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
