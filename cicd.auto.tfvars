@@ -3,7 +3,7 @@
 # =============================================================================
 
 # 啟用 CI/CD Pipeline
-enable_cicd = true
+enable_cicd = false
 
 # GitHub Repository
 github_repo_owner = "II-eta-II"

@@ -43,7 +43,8 @@ resource "aws_s3_bucket_public_access_block" "media_offload" {
 
 # S3 Bucket Policy for Media (Public Read)
 resource "aws_s3_bucket_policy" "media_offload" {
-  bucket = aws_s3_bucket.media_offload.id
+  bucket     = aws_s3_bucket.media_offload.id
+  depends_on = [aws_s3_bucket_public_access_block.media_offload]
 
   policy = jsonencode({
     Version = "2012-10-17"

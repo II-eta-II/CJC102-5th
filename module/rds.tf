@@ -23,7 +23,7 @@ resource "aws_security_group" "rds" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
+    security_groups = [aws_security_group.blue_ecs_tasks.id]
   }
 
   egress {
@@ -94,7 +94,7 @@ resource "aws_security_group" "rds_green" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
+    security_groups = [aws_security_group.blue_ecs_tasks.id]
   }
 
   ingress {

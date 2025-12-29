@@ -157,7 +157,7 @@ resource "aws_iam_role_policy" "codebuild" {
         ]
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
-          aws_iam_role.ecs_task.arn,
+          aws_iam_role.blue_ecs_task.arn,
           aws_iam_role.ecs_task_green.arn
         ]
       },
@@ -261,7 +261,7 @@ resource "aws_codebuild_project" "docker_build" {
 
     environment_variable {
       name  = "BLUE_SERVICE_NAME"
-      value = aws_ecs_service.main.name
+      value = aws_ecs_service.blue.name
     }
 
     environment_variable {
@@ -286,7 +286,7 @@ resource "aws_codebuild_project" "docker_build" {
 
     environment_variable {
       name  = "BLUE_TASK_FAMILY"
-      value = aws_ecs_task_definition.main.family
+      value = aws_ecs_task_definition.blue.family
     }
 
     environment_variable {
@@ -381,7 +381,7 @@ resource "aws_codebuild_project" "efs_sync" {
 
     environment_variable {
       name  = "BLUE_SERVICE_NAME"
-      value = aws_ecs_service.main.name
+      value = aws_ecs_service.blue.name
     }
 
     environment_variable {
@@ -391,7 +391,7 @@ resource "aws_codebuild_project" "efs_sync" {
 
     environment_variable {
       name  = "BLUE_TASK_FAMILY"
-      value = aws_ecs_task_definition.main.family
+      value = aws_ecs_task_definition.blue.family
     }
 
     environment_variable {

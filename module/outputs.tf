@@ -81,22 +81,22 @@ output "ecs_cluster_name" {
 
 output "ecs_service_name" {
   description = "ECS Service Name"
-  value       = aws_ecs_service.main.name
+  value       = aws_ecs_service.blue.name
 }
 
 output "ecs_task_definition_arn" {
   description = "ECS Task Definition ARN"
-  value       = aws_ecs_task_definition.main.arn
+  value       = aws_ecs_task_definition.blue.arn
 }
 
 output "ecs_security_group_id" {
   description = "ECS Tasks Security Group ID"
-  value       = aws_security_group.ecs_tasks.id
+  value       = aws_security_group.blue_ecs_tasks.id
 }
 
 output "ecs_log_group_name" {
   description = "CloudWatch Log Group for ECS"
-  value       = aws_cloudwatch_log_group.ecs.name
+  value       = aws_cloudwatch_log_group.blue_ecs.name
 }
 
 # RDS Outputs
