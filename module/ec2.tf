@@ -75,9 +75,9 @@ resource "aws_lb_target_group" "ecs" {
 
   deregistration_delay = 30
 
-  lifecycle {
-    create_before_destroy = true
-  }
+
+
+
 
   tags = {
     Name        = "${var.project_name}-ecs-target-group-blue"
@@ -124,11 +124,6 @@ resource "aws_lb_listener" "https" {
   }
 
   # Ignore manual weight adjustments made via AWS Console or CLI
-  lifecycle {
-    ignore_changes = [
-      default_action[0].forward[0].target_group
-    ]
-  }
 }
 
 # Temporarily disabled - Blue subdomain listener rule
