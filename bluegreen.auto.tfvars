@@ -9,7 +9,7 @@
 blue_ecs_desired_count = 2        # Blue ECS 任務數量 (0 = standby)
 blue_ecs_min_capacity  = 0        # Blue Auto Scaling 最小值 (0 = 可縮至零)
 blue_ecs_max_capacity  = 4        # Blue Auto Scaling 最大值
-blue_image_tag         = "v1" # Blue Docker Image Tag
+blue_image_tag         = "v2" # Blue Docker Image Tag
 
 # -----------------------------------------------------------------------------
 # Green Environment

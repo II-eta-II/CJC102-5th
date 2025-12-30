@@ -179,6 +179,21 @@ resource "aws_lambda_permission" "ecr_push" {
   source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
 }
 
+# Also trigger SQL Import Lambda on ECR push
+resource "aws_cloudwatch_event_target" "ecr_push_sql_import" {
+  rule      = aws_cloudwatch_event_rule.ecr_push.name
+  target_id = "sql-import-lambda"
+  arn       = aws_lambda_function.sql_import.arn
+}
+
+resource "aws_lambda_permission" "ecr_push_sql_import" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sql_import.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
+}
+
 # -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
@@ -191,6 +206,18 @@ output "ecr_deploy_lambda_arn" {
 output "ecr_push_event_rule" {
   description = "Name of the EventBridge rule for ECR push"
   value       = aws_cloudwatch_event_rule.ecr_push.name
+}
+
+# =============================================================================
+# PyMySQL Lambda Layer
+# =============================================================================
+
+resource "aws_lambda_layer_version" "pymysql" {
+  filename            = "${path.module}/lambda/pymysql-layer.zip"
+  layer_name          = "${var.project_name}-pymysql"
+  description         = "PyMySQL library for Python 3.11"
+  compatible_runtimes = ["python3.11"]
+  source_code_hash    = filebase64sha256("${path.module}/lambda/pymysql-layer.zip")
 }
 
 # =============================================================================
@@ -377,23 +404,27 @@ def handler(event, context):
     # 5. Execute SQL on RDS
     print(f"Connecting to RDS: {rds_host}")
     try:
+        # Use CLIENT.MULTI_STATEMENTS to execute multiple SQL statements at once
+        from pymysql.constants import CLIENT
         conn = pymysql.connect(
             host=rds_host,
             user=db_user,
             password=db_password,
             database=db_name,
-            connect_timeout=30
+            connect_timeout=30,
+            client_flag=CLIENT.MULTI_STATEMENTS
         )
         
-        with open(sql_file_path, 'r') as f:
+        with open(sql_file_path, 'r', encoding='utf-8') as f:
             sql_content = f.read()
         
         cursor = conn.cursor()
-        # Execute each statement separately
-        for statement in sql_content.split(';'):
-            statement = statement.strip()
-            if statement:
-                cursor.execute(statement)
+        # Execute entire SQL dump as multi-statement
+        cursor.execute(sql_content)
+        
+        # Consume all results to avoid "Commands out of sync" error
+        while cursor.nextset():
+            pass
         
         conn.commit()
         cursor.close()
@@ -446,17 +477,8 @@ resource "aws_lambda_function" "sql_import" {
     }
   }
 
-  # NOTE: This Lambda requires pymysql package
-  # You can either:
-  # 1. Create a Lambda Layer manually with pymysql
-  # 2. Use the AWS CLI to deploy with dependencies bundled
-  # 
-  # To create layer manually:
-  # mkdir python && pip install pymysql -t python
-  # zip -r pymysql-layer.zip python
-  # aws lambda publish-layer-version --layer-name pymysql --zip-file fileb://pymysql-layer.zip --compatible-runtimes python3.11
-  # Then uncomment and update the ARN below:
-  # layers = ["arn:aws:lambda:ap-northeast-1:YOUR_ACCOUNT:layer:pymysql:1"]
+  # PyMySQL Lambda Layer
+  layers = [aws_lambda_layer_version.pymysql.arn]
 
   tags = {
     Name = "${var.project_name}-sql-import-lambda"

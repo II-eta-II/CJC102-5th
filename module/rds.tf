@@ -26,6 +26,14 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.blue_ecs_tasks.id]
   }
 
+  ingress {
+    description     = "MySQL from SQL Import Lambda"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sql_import_lambda.id]
+  }
+
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
@@ -103,6 +111,14 @@ resource "aws_security_group" "rds_green" {
     to_port         = 3306
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs_tasks_green.id]
+  }
+
+  ingress {
+    description     = "MySQL from SQL Import Lambda"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sql_import_lambda.id]
   }
 
   egress {
