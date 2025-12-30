@@ -301,21 +301,6 @@ resource "aws_ecs_task_definition" "blue" {
       }
 
       mountPoints = [
-        {
-          sourceVolume  = "efs-wp-admin"
-          containerPath = "/var/www/html/wp-admin"
-          readOnly      = false
-        },
-        {
-          sourceVolume  = "efs-wp-content"
-          containerPath = "/var/www/html/wp-content"
-          readOnly      = false
-        },
-        {
-          sourceVolume  = "efs-wp-includes"
-          containerPath = "/var/www/html/wp-includes"
-          readOnly      = false
-        }
       ]
 
       logConfiguration = {
@@ -653,21 +638,6 @@ resource "aws_ecs_task_definition" "green" {
       }
 
       mountPoints = [
-        {
-          sourceVolume  = "efs-wp-admin-green"
-          containerPath = "/var/www/html/wp-admin"
-          readOnly      = false
-        },
-        {
-          sourceVolume  = "efs-wp-content-green"
-          containerPath = "/var/www/html/wp-content"
-          readOnly      = false
-        },
-        {
-          sourceVolume  = "efs-wp-includes-green"
-          containerPath = "/var/www/html/wp-includes"
-          readOnly      = false
-        }
       ]
 
       logConfiguration = {
