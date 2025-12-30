@@ -55,27 +55,77 @@ resource "aws_efs_mount_target" "main" {
   security_groups = [aws_security_group.efs.id]
 }
 
-# EFS Access Point for ECS - Blue
-# Bitnami containers run as UID 1001 (daemon user)
-resource "aws_efs_access_point" "ecs" {
+# EFS Access Points for ECS - Blue
+# WordPress official containers run as UID 33 (www-data)
+
+# Access Point for wp-admin
+resource "aws_efs_access_point" "wp_admin" {
   file_system_id = aws_efs_file_system.main.id
 
   posix_user {
-    uid = 1001
-    gid = 1001
+    uid = 33
+    gid = 33
   }
 
   root_directory {
-    path = "/bitnami"
+    path = "/wp-admin"
     creation_info {
-      owner_uid   = 1001
-      owner_gid   = 1001
+      owner_uid   = 33
+      owner_gid   = 33
       permissions = "0755"
     }
   }
 
   tags = {
-    Name        = "${var.project_name}-ecs-access-point-blue"
+    Name        = "${var.project_name}-ecs-ap-wp-admin-blue"
+    Environment = "blue"
+  }
+}
+
+# Access Point for wp-content
+resource "aws_efs_access_point" "ecs" {
+  file_system_id = aws_efs_file_system.main.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-content"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-content-blue"
+    Environment = "blue"
+  }
+}
+
+# Access Point for wp-includes
+resource "aws_efs_access_point" "wp_includes" {
+  file_system_id = aws_efs_file_system.main.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-includes"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-includes-blue"
     Environment = "blue"
   }
 }
@@ -108,25 +158,74 @@ resource "aws_efs_mount_target" "green" {
   security_groups = [aws_security_group.efs.id]
 }
 
-resource "aws_efs_access_point" "green" {
+# Access Point for wp-admin - Green
+resource "aws_efs_access_point" "wp_admin_green" {
   file_system_id = aws_efs_file_system.green.id
 
   posix_user {
-    uid = 1001
-    gid = 1001
+    uid = 33
+    gid = 33
   }
 
   root_directory {
-    path = "/bitnami"
+    path = "/wp-admin"
     creation_info {
-      owner_uid   = 1001
-      owner_gid   = 1001
+      owner_uid   = 33
+      owner_gid   = 33
       permissions = "0755"
     }
   }
 
   tags = {
-    Name        = "${var.project_name}-ecs-access-point-green"
+    Name        = "${var.project_name}-ecs-ap-wp-admin-green"
+    Environment = "green"
+  }
+}
+
+# Access Point for wp-content - Green
+resource "aws_efs_access_point" "green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-content"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-content-green"
+    Environment = "green"
+  }
+}
+
+# Access Point for wp-includes - Green
+resource "aws_efs_access_point" "wp_includes_green" {
+  file_system_id = aws_efs_file_system.green.id
+
+  posix_user {
+    uid = 33
+    gid = 33
+  }
+
+  root_directory {
+    path = "/wp-includes"
+    creation_info {
+      owner_uid   = 33
+      owner_gid   = 33
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-ecs-ap-wp-includes-green"
     Environment = "green"
   }
 }

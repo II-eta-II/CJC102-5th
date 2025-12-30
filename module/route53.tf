@@ -82,34 +82,30 @@ resource "aws_route53_record" "entry_point" {
   }
 }
 
-# Route53 A Record for Blue environment subdomain
-resource "aws_route53_record" "blue_subdomain" {
-  provider = aws.route53
-  zone_id  = local.route53_zone_id
-  name     = "blue.${var.subdomain}.${local.route53_domain_name}"
-  type     = "A"
+# Temporarily disabled - Blue subdomain Route53 record
+# resource "aws_route53_record" "blue_subdomain" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = "blue.${var.subdomain}.${local.route53_domain_name}"
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }
 
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
-}
-
-# Route53 A Record for Green environment subdomain
-resource "aws_route53_record" "green_subdomain" {
-  provider = aws.route53
-  zone_id  = local.route53_zone_id
-  name     = "green.${var.subdomain}.${local.route53_domain_name}"
-  type     = "A"
-
-  alias {
-    name                   = aws_lb.main.dns_name
-    zone_id                = aws_lb.main.zone_id
-    evaluate_target_health = true
-  }
-}
-
-
-
-
+# Temporarily disabled - Green subdomain Route53 record
+# resource "aws_route53_record" "green_subdomain" {
+#   provider = aws.route53
+#   zone_id  = local.route53_zone_id
+#   name     = "green.${var.subdomain}.${local.route53_domain_name}"
+#   type     = "A"
+#
+#   alias {
+#     name                   = aws_lb.main.dns_name
+#     zone_id                = aws_lb.main.zone_id
+#     evaluate_target_health = true
+#   }
+# }

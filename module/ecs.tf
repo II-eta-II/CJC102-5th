@@ -3,7 +3,7 @@
 # =============================================================================
 
 # CloudWatch Log Group - Blue
-resource "aws_cloudwatch_log_group" "ecs" {
+resource "aws_cloudwatch_log_group" "blue_ecs" {
   name              = "/ecs/${var.project_name}-${var.ecs_service_name}-blue"
   retention_in_days = 7
 
@@ -62,7 +62,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
 
 # IAM Role for ECS Task (application permissions)
 
-resource "aws_iam_role" "ecs_task" {
+resource "aws_iam_role" "blue_ecs_task" {
   name = "${var.project_name}-ecs-task-role"
 
   assume_role_policy = jsonencode({
@@ -84,9 +84,9 @@ resource "aws_iam_role" "ecs_task" {
 }
 
 # Policy for ECS Task to access EFS
-resource "aws_iam_role_policy" "ecs_task_efs" {
-  name = "${var.project_name}-ecs-task-efs-policy"
-  role = aws_iam_role.ecs_task.id
+resource "aws_iam_role_policy" "blue_ecs_task_efs" {
+  name = "${var.project_name}-ecs-task-efs-policy-blue"
+  role = aws_iam_role.blue_ecs_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -109,9 +109,9 @@ resource "aws_iam_role_policy" "ecs_task_efs" {
 }
 
 # Policy for ECS Task to access S3 Media Offload bucket
-resource "aws_iam_role_policy" "ecs_task_s3_media" {
-  name = "${var.project_name}-ecs-task-s3-media-policy"
-  role = aws_iam_role.ecs_task.id
+resource "aws_iam_role_policy" "blue_ecs_task_s3_media" {
+  name = "${var.project_name}-ecs-task-s3-media-policy-blue"
+  role = aws_iam_role.blue_ecs_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -148,9 +148,9 @@ resource "aws_iam_role_policy" "ecs_task_s3_media" {
 }
 
 # Policy for ECS Exec (SSM Session Manager)
-resource "aws_iam_role_policy" "ecs_task_exec_ssm" {
-  name = "${var.project_name}-ecs-task-exec-ssm-policy"
-  role = aws_iam_role.ecs_task.id
+resource "aws_iam_role_policy" "blue_ecs_task_exec_ssm" {
+  name = "${var.project_name}-ecs-task-exec-ssm-policy-blue"
+  role = aws_iam_role.blue_ecs_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -170,7 +170,7 @@ resource "aws_iam_role_policy" "ecs_task_exec_ssm" {
 }
 
 # Security Group for ECS Tasks - Blue
-resource "aws_security_group" "ecs_tasks" {
+resource "aws_security_group" "blue_ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-blue-sg"
   description = "Security group for Blue ECS tasks"
   vpc_id      = aws_vpc.main.id
@@ -225,14 +225,14 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 }
 
 # ECS Task Definition
-resource "aws_ecs_task_definition" "main" {
+resource "aws_ecs_task_definition" "blue" {
   family                   = "${var.project_name}-${var.ecs_service_name}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.ecs_task_cpu
   memory                   = var.ecs_task_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
-  task_role_arn            = aws_iam_role.ecs_task.arn
+  task_role_arn            = aws_iam_role.blue_ecs_task.arn
 
   container_definitions = jsonencode([
     {
@@ -302,8 +302,18 @@ resource "aws_ecs_task_definition" "main" {
 
       mountPoints = [
         {
-          sourceVolume  = "efs-wordpress"
+          sourceVolume  = "efs-wp-admin"
+          containerPath = "/var/www/html/wp-admin"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "efs-wp-content"
           containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "efs-wp-includes"
+          containerPath = "/var/www/html/wp-includes"
           readOnly      = false
         }
       ]
@@ -311,7 +321,7 @@ resource "aws_ecs_task_definition" "main" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-group"         = aws_cloudwatch_log_group.blue_ecs.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "wordpress"
         }
@@ -320,11 +330,41 @@ resource "aws_ecs_task_definition" "main" {
   ])
 
   volume {
-    name = "efs-wordpress"
+    name = "efs-wp-admin"
 
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.main.id
       transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.wp_admin.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
+  volume {
+    name = "efs-wp-content"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.ecs.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
+  volume {
+    name = "efs-wp-includes"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.wp_includes.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -332,13 +372,14 @@ resource "aws_ecs_task_definition" "main" {
     Name        = "${var.project_name}-task-definition-blue"
     Environment = "blue"
   }
+
 }
 
 # ECS Service - Blue
-resource "aws_ecs_service" "main" {
+resource "aws_ecs_service" "blue" {
   name                   = "${var.ecs_service_name}-blue"
   cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.main.arn
+  task_definition        = aws_ecs_task_definition.blue.arn
   desired_count          = var.blue_ecs_desired_count
   launch_type            = "FARGATE"
   enable_execute_command = true
@@ -348,7 +389,7 @@ resource "aws_ecs_service" "main" {
 
   network_configuration {
     subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.ecs_tasks.id]
+    security_groups  = [aws_security_group.blue_ecs_tasks.id]
     assign_public_ip = false
   }
 
@@ -368,24 +409,25 @@ resource "aws_ecs_service" "main" {
     aws_efs_mount_target.main,
     aws_lb_listener.http
   ]
+
 }
 
 # Application Auto Scaling Target
-resource "aws_appautoscaling_target" "ecs" {
+resource "aws_appautoscaling_target" "blue_ecs" {
   max_capacity       = var.blue_ecs_max_capacity
   min_capacity       = var.blue_ecs_min_capacity
-  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.main.name}"
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.blue.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
 # Auto Scaling Policy - CPU Based
-resource "aws_appautoscaling_policy" "ecs_cpu" {
+resource "aws_appautoscaling_policy" "blue_ecs_cpu" {
   name               = "${var.project_name}-ecs-cpu-autoscaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.blue_ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.blue_ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.blue_ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
@@ -398,12 +440,12 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 }
 
 # Auto Scaling Policy - Memory Based
-resource "aws_appautoscaling_policy" "ecs_memory" {
+resource "aws_appautoscaling_policy" "blue_ecs_memory" {
   name               = "${var.project_name}-ecs-memory-autoscaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.blue_ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.blue_ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.blue_ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
@@ -612,8 +654,18 @@ resource "aws_ecs_task_definition" "green" {
 
       mountPoints = [
         {
-          sourceVolume  = "efs-wordpress-green"
+          sourceVolume  = "efs-wp-admin-green"
+          containerPath = "/var/www/html/wp-admin"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "efs-wp-content-green"
           containerPath = "/var/www/html/wp-content"
+          readOnly      = false
+        },
+        {
+          sourceVolume  = "efs-wp-includes-green"
+          containerPath = "/var/www/html/wp-includes"
           readOnly      = false
         }
       ]
@@ -630,11 +682,41 @@ resource "aws_ecs_task_definition" "green" {
   ])
 
   volume {
-    name = "efs-wordpress-green"
+    name = "efs-wp-admin-green"
 
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.green.id
       transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.wp_admin_green.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
+  volume {
+    name = "efs-wp-content-green"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.green.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.green.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
+  volume {
+    name = "efs-wp-includes-green"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.green.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.wp_includes_green.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -642,6 +724,7 @@ resource "aws_ecs_task_definition" "green" {
     Name        = "${var.project_name}-task-definition-green"
     Environment = "green"
   }
+
 }
 
 resource "aws_ecs_service" "green" {
@@ -672,6 +755,7 @@ resource "aws_ecs_service" "green" {
   }
 
   depends_on = [aws_iam_role_policy_attachment.ecs_task_execution, aws_efs_mount_target.green, aws_lb_listener.http]
+
 }
 
 resource "aws_appautoscaling_target" "ecs_green" {
