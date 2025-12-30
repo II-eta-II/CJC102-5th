@@ -63,7 +63,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
 # IAM Role for ECS Task (application permissions)
 
 resource "aws_iam_role" "blue_ecs_task" {
-  name = "${var.project_name}-ecs-task-role"
+  name = "${var.project_name}-ecs-task-role-blue"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -79,7 +79,7 @@ resource "aws_iam_role" "blue_ecs_task" {
   })
 
   tags = {
-    Name = "${var.project_name}-ecs-task-role"
+    Name = "${var.project_name}-ecs-task-role-blue"
   }
 }
 
@@ -226,7 +226,7 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 # ECS Task Definition
 resource "aws_ecs_task_definition" "blue" {
-  family                   = "${var.project_name}-${var.ecs_service_name}"
+  family                   = "${var.project_name}-${var.ecs_service_name}-blue"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.ecs_task_cpu
