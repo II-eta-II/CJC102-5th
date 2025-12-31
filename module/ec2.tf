@@ -126,6 +126,47 @@ resource "aws_lb_listener" "https" {
   # Ignore manual weight adjustments made via AWS Console or CLI
 }
 
+# =============================================================================
+# Header-based routing for direct Blue/Green access
+# Use browser extension (ModHeader) to set X-Target-Env header
+# =============================================================================
+
+# Route to Blue when X-Target-Env: blue
+resource "aws_lb_listener_rule" "blue_header" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ecs.arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = "X-Target-Env"
+      values           = ["blue"]
+    }
+  }
+}
+
+# Route to Green when X-Target-Env: green
+resource "aws_lb_listener_rule" "green_header" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.ecs_green.arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = "X-Target-Env"
+      values           = ["green"]
+    }
+  }
+}
+
 # Temporarily disabled - Blue subdomain listener rule
 # resource "aws_lb_listener_rule" "blue_subdomain" {
 #   listener_arn = aws_lb_listener.https.arn
