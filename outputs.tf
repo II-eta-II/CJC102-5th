@@ -1,64 +1,50 @@
-# Root-level outputs - forwarding from module
+# =============================================================================
+# 主要輸出 - 依照重要性排序
+# =============================================================================
+
+output "a_website_url" {
+  description = "WordPress 網站 URL (Route53 CNAME)"
+  value       = "https://${local.subdomain}.${var.route53_domain_name}"
+}
+
+output "b_alb_dns_name" {
+  description = "ALB DNS 名稱（實際端點）"
+  value       = module.wordpress.alb_dns_name
+}
+
+output "c_blue_green_traffic" {
+  description = "藍綠環境流量權重比例"
+  value = {
+    blue_weight  = var.blue_weight
+    green_weight = var.green_weight
+  }
+}
+
+output "d_blue_environment" {
+  description = "Blue 環境配置"
+  value = {
+    image_tag     = var.blue_image_tag
+    desired_count = var.blue_ecs_desired_count
+  }
+}
+
+output "e_green_environment" {
+  description = "Green 環境配置"
+  value = {
+    image_tag     = var.green_image_tag
+    desired_count = var.green_ecs_desired_count
+  }
+}
+
+# =============================================================================
+# 基礎設施詳細資訊
+# =============================================================================
 
 output "vpc_id" {
   description = "VPC ID"
   value       = module.wordpress.vpc_id
 }
 
-output "vpc_cidr" {
-  description = "VPC CIDR block"
-  value       = module.wordpress.vpc_cidr
-}
-
-output "public_subnet_ids" {
-  description = "List of public subnet IDs"
-  value       = module.wordpress.public_subnet_ids
-}
-
-output "private_subnet_ids" {
-  description = "List of private subnet IDs"
-  value       = module.wordpress.private_subnet_ids
-}
-
-output "efs_id" {
-  description = "EFS File System ID"
-  value       = module.wordpress.efs_id
-}
-
-output "efs_dns_name" {
-  description = "EFS DNS name for mounting"
-  value       = module.wordpress.efs_dns_name
-}
-
-output "ecs_cluster_name" {
-  description = "ECS Cluster Name"
-  value       = module.wordpress.ecs_cluster_name
-}
-
-output "ecs_service_name" {
-  description = "ECS Service Name"
-  value       = module.wordpress.ecs_service_name
-}
-
-output "rds_endpoint" {
-  description = "RDS instance endpoint"
-  value       = module.wordpress.rds_endpoint
-}
-
-output "rds_address" {
-  description = "RDS instance address"
-  value       = module.wordpress.rds_address
-}
-
-output "alb_dns_name" {
-  description = "ALB DNS name"
-  value       = module.wordpress.alb_dns_name
-}
-
-output "alb_url" {
-  description = "URL to access the application via ALB"
-  value       = module.wordpress.alb_url
-}
 
 output "s3_media_offload_bucket_name" {
   description = "S3 bucket name for WordPress media offload"

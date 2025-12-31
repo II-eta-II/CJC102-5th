@@ -7,8 +7,8 @@
 # -----------------------------------------------------------------------------
 
 blue_ecs_desired_count = 2        # Blue ECS 任務數量 (0 = standby)
-blue_ecs_min_capacity  = 0        # Blue Auto Scaling 最小值 (0 = 可縮至零)
-blue_ecs_max_capacity  = 4        # Blue Auto Scaling 最大值
+blue_ecs_min_capacity  = 1        # Blue Auto Scaling 最小值 (0 = 可縮至零)
+blue_ecs_max_capacity  = 10        # Blue Auto Scaling 最大值
 blue_image_tag         = "v2" # Blue Docker Image Tag
 
 # -----------------------------------------------------------------------------
@@ -24,8 +24,8 @@ green_image_tag         = "v1" # Green Docker Image Tag
 # ALB Traffic Weights (blue_weight + green_weight = 100)
 # -----------------------------------------------------------------------------
 
-blue_weight  = 0 # Blue 流量權重 (0-100)
-green_weight = 100   # Green 流量權重 (0-100)
+blue_weight  = 100 # Blue 流量權重 (0-100)
+green_weight = 0   # Green 流量權重 (0-100)
 
 # =============================================================================
 # Usage Examples:

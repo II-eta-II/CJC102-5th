@@ -392,7 +392,8 @@ resource "aws_ecs_service" "blue" {
   depends_on = [
     aws_iam_role_policy_attachment.ecs_task_execution,
     aws_efs_mount_target.main,
-    aws_lb_listener.http
+    aws_lb_listener.http,
+    aws_lb_listener.https
   ]
 
 }
@@ -418,9 +419,9 @@ resource "aws_appautoscaling_policy" "blue_ecs_cpu" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value       = 70.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
+    target_value       = 30.0
+    scale_in_cooldown  = 60
+    scale_out_cooldown = 20
   }
 }
 
@@ -724,7 +725,12 @@ resource "aws_ecs_service" "green" {
     Environment = "green"
   }
 
-  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution, aws_efs_mount_target.green, aws_lb_listener.http]
+  depends_on = [
+    aws_iam_role_policy_attachment.ecs_task_execution,
+    aws_efs_mount_target.green,
+    aws_lb_listener.http,
+    aws_lb_listener.https
+  ]
 
 }
 
@@ -745,9 +751,9 @@ resource "aws_appautoscaling_policy" "ecs_cpu_green" {
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification { predefined_metric_type = "ECSServiceAverageCPUUtilization" }
-    target_value       = 70.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
+    target_value       = 30.0
+    scale_in_cooldown  = 60
+    scale_out_cooldown = 20
   }
 }
 
@@ -761,7 +767,7 @@ resource "aws_appautoscaling_policy" "ecs_memory_green" {
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification { predefined_metric_type = "ECSServiceAverageMemoryUtilization" }
     target_value       = 80.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
+    scale_in_cooldown  = 60
+    scale_out_cooldown = 20
   }
 }

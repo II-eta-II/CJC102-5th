@@ -21,12 +21,17 @@ terraform {
   }
 }
 
-# Random 4-char subdomain generator
+# Random 4-char subdomain generator (used when subdomain variable is empty)
 resource "random_string" "subdomain" {
   length  = 4
   special = false
   upper   = false
   numeric = false
+}
+
+# Subdomain selection: use variable if set, otherwise use random
+locals {
+  subdomain = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
 }
 
 provider "aws" {
@@ -136,7 +141,7 @@ module "wordpress" {
   # Route53 Configuration
   route53_zone_id     = var.route53_zone_id
   route53_domain_name = var.route53_domain_name
-  subdomain           = var.subdomain != "" ? var.subdomain : random_string.subdomain.result
+  subdomain           = local.subdomain
 
   # Blue-Green Deployment Configuration
   blue_ecs_desired_count  = var.blue_ecs_desired_count
