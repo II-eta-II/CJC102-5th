@@ -18,14 +18,14 @@ aws ecs execute-command \
   --task <task-id> \
   --container wordpress \
   --interactive \
-  --command "/bin/bash" \
+  --command "/bin/sh" \
   --region ap-northeast-1
 ```
 
 ### 3. 安裝 MySQL Client
 
 ```bash
-apt-get update && apt-get install -y default-mysql-client
+apk update && apk add mysql-client
 ```
 
 ### 4. 連線資料庫

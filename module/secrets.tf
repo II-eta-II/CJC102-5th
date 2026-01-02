@@ -6,7 +6,7 @@
 resource "aws_secretsmanager_secret" "wordpress_env" {
   name                    = "${var.project_name}-wordpress-env"
   description             = "WordPress and Database credentials (username and password)"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = {
     Name = "${var.project_name}-wordpress-env"

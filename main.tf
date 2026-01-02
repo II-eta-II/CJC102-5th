@@ -154,4 +154,13 @@ module "wordpress" {
   green_image_tag         = var.green_image_tag
   blue_weight             = var.blue_weight
   green_weight            = var.green_weight
+
+  # Canary Deployment Configuration
+  canary_enabled       = var.canary_enabled
+  canary_percentage    = var.canary_percentage
+  pre_deploy_wait_sec  = var.pre_deploy_wait_sec
+  canary_duration_sec  = var.canary_duration_sec
+  full_deploy_wait_sec = var.full_deploy_wait_sec
+  rollback_window_sec  = var.rollback_window_sec
 }
+
