@@ -55,3 +55,8 @@ output "ecr_repository_url" {
   description = "ECR repository URL for WordPress image"
   value       = module.wordpress.ecr_repository_url
 }
+
+output "sql_backup_bucket_url" {
+  description = "S3 bucket URL for SQL backups"
+  value       = "s3://${module.wordpress.sql_backup_bucket_name}"
+}

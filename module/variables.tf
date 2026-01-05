@@ -218,3 +218,44 @@ variable "green_weight" {
   type        = number
   default     = 0
 }
+
+# =============================================================================
+# Canary Deployment Configuration
+# =============================================================================
+
+variable "canary_enabled" {
+  description = "Enable Canary deployment automation"
+  type        = bool
+  default     = true
+}
+
+variable "canary_percentage" {
+  description = "Initial traffic percentage for canary (0-50)"
+  type        = number
+  default     = 10
+}
+
+variable "pre_deploy_wait_sec" {
+  description = "Wait time for new deployment to be ready before canary (seconds)"
+  type        = number
+  default     = 120
+}
+
+variable "canary_duration_sec" {
+  description = "Duration to observe canary before full deployment (seconds)"
+  type        = number
+  default     = 300
+}
+
+variable "full_deploy_wait_sec" {
+  description = "Wait time after full deployment (seconds)"
+  type        = number
+  default     = 60
+}
+
+variable "rollback_window_sec" {
+  description = "Time window for manual rollback after deployment (seconds)"
+  type        = number
+  default     = 600
+}
+

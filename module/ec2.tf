@@ -252,3 +252,154 @@ resource "aws_lb_target_group" "ecs_green" {
     Environment = "green"
   }
 }
+
+# =============================================================================
+# CloudWatch Monitoring - HTTP Error Alarms
+# =============================================================================
+
+# Extract ALB ARN suffix for CloudWatch metrics
+locals {
+  alb_arn_suffix = regex("app/.+$", aws_lb.main.arn)
+}
+
+# CloudWatch Alarm - ALB 4XX Errors (Client Errors)
+resource "aws_cloudwatch_metric_alarm" "alb_4xx_errors" {
+  alarm_name          = "${var.project_name}-alb-4xx-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HTTPCode_Target_4XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300 # 5 minutes
+  statistic           = "Sum"
+  threshold           = 50 # Alert if > 50 4xx errors in 5 minutes
+  alarm_description   = "ALB 4XX errors exceeded threshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = local.alb_arn_suffix
+  }
+
+  tags = {
+    Name = "${var.project_name}-alb-4xx-alarm"
+  }
+}
+
+# CloudWatch Alarm - ALB 5XX Errors (Server Errors)
+resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
+  alarm_name          = "${var.project_name}-alb-5xx-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300 # 5 minutes
+  statistic           = "Sum"
+  threshold           = 10 # Alert if > 10 5xx errors in 5 minutes
+  alarm_description   = "ALB 5XX errors exceeded threshold - potential server issues"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = local.alb_arn_suffix
+  }
+
+  tags = {
+    Name = "${var.project_name}-alb-5xx-alarm"
+  }
+}
+
+# CloudWatch Alarm - ALB ELB 5XX (Load Balancer Errors)
+resource "aws_cloudwatch_metric_alarm" "alb_elb_5xx_errors" {
+  alarm_name          = "${var.project_name}-alb-elb-5xx-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5 # Alert if > 5 ELB 5xx errors
+  alarm_description   = "ELB 5XX errors - Load Balancer connectivity issues"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = local.alb_arn_suffix
+  }
+
+  tags = {
+    Name = "${var.project_name}-alb-elb-5xx-alarm"
+  }
+}
+
+# CloudWatch Dashboard for HTTP Errors Overview
+resource "aws_cloudwatch_dashboard" "http_errors" {
+  dashboard_name = "${var.project_name}-http-errors"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title   = "ALB HTTP 4XX Errors"
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          metrics = [
+            ["AWS/ApplicationELB", "HTTPCode_Target_4XX_Count", "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60 }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title   = "ALB HTTP 5XX Errors"
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          metrics = [
+            ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60 }],
+            ["AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60 }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Request Count"
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60 }]
+          ]
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Target Response Time"
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          metrics = [
+            ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", local.alb_arn_suffix, { stat = "Average", period = 60 }]
+          ]
+        }
+      }
+    ]
+  })
+}
+
