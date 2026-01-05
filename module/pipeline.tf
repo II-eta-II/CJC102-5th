@@ -37,7 +37,31 @@ resource "aws_iam_role_policy" "ecs_deploy_lambda" {
         Effect = "Allow"
         Action = [
           "ecs:UpdateService",
-          "ecs:DescribeServices"
+          "ecs:DescribeServices",
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeRules",
+          "elasticloadbalancing:DescribeListeners"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:DescribeImages"
         ]
         Resource = "*"
       },
@@ -49,6 +73,13 @@ resource "aws_iam_role_policy" "ecs_deploy_lambda" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = aws_lambda_function.canary_deploy.arn
       }
     ]
   })
@@ -67,44 +98,168 @@ data "archive_file" "ecs_deploy_lambda" {
 import boto3
 import json
 import os
+import re
 
 def handler(event, context):
     print(f"Received event: {json.dumps(event)}")
     
     ecs = boto3.client('ecs')
-    cluster_name = os.environ['ECS_CLUSTER_NAME']
-    service_names = os.environ['ECS_SERVICE_NAMES'].split(',')
+    elbv2 = boto3.client('elbv2')
+    ecr = boto3.client('ecr')
+    lambda_client = boto3.client('lambda')
     
-    results = []
-    for service_name in service_names:
-        service_name = service_name.strip()
-        if not service_name:
-            continue
-            
+    # Environment variables
+    cluster_name = os.environ['ECS_CLUSTER_NAME']
+    blue_service = os.environ['BLUE_SERVICE_NAME']
+    green_service = os.environ['GREEN_SERVICE_NAME']
+    listener_arn = os.environ['LISTENER_ARN']
+    blue_tg_arn = os.environ['BLUE_TG_ARN']
+    green_tg_arn = os.environ['GREEN_TG_ARN']
+    ecr_repo_url = os.environ['ECR_REPO_URL']
+    canary_deploy_lambda_arn = os.environ.get('CANARY_DEPLOY_LAMBDA_ARN', '')
+    
+    # Get image digest and repo name from ECR push event
+    detail = event.get('detail', {})
+    image_digest = detail.get('image-digest', '')
+    repo_name = detail.get('repository-name', '')
+    triggered_tag = detail.get('image-tag', 'latest')
+    
+    print(f"Triggered by tag: {triggered_tag}, digest: {image_digest}")
+    
+    # Find version tag (x.x.x format) for the same image digest
+    image_tag = None
+    if image_digest and repo_name:
         try:
-            print(f"Forcing new deployment for service: {service_name}")
-            response = ecs.update_service(
-                cluster=cluster_name,
-                service=service_name,
-                forceNewDeployment=True
+            # Get all tags for this image digest
+            response = ecr.describe_images(
+                repositoryName=repo_name,
+                imageIds=[{'imageDigest': image_digest}]
             )
-            results.append({
-                'service': service_name,
-                'status': 'success',
-                'deploymentId': response['service']['deployments'][0]['id']
-            })
-            print(f"Successfully triggered deployment for {service_name}")
+            
+            for image in response.get('imageDetails', []):
+                tags = image.get('imageTags', [])
+                print(f"Found tags for digest: {tags}")
+                
+                # Find version tag matching x.x.x pattern
+                for tag in tags:
+                    if re.match(r'^\d+\.\d+\.\d+$', tag):
+                        image_tag = tag
+                        print(f"Found version tag: {image_tag}")
+                        break
+                
+                if image_tag:
+                    break
         except Exception as e:
-            print(f"Error updating service {service_name}: {str(e)}")
-            results.append({
-                'service': service_name,
-                'status': 'error',
-                'error': str(e)
-            })
+            print(f"Error looking up ECR tags: {e}")
+    
+    if not image_tag:
+        print(f"No version tag (x.x.x) found for this image. Using triggered tag: {triggered_tag}")
+        image_tag = triggered_tag
+    
+    print(f"Using image tag: {image_tag}")
+    
+    # Detect inactive environment (weight = 0)
+    rules = elbv2.describe_rules(ListenerArn=listener_arn)['Rules']
+    default_rule = next((r for r in rules if r['IsDefault']), None)
+    
+    if not default_rule:
+        return {'statusCode': 500, 'body': 'No default rule found'}
+    
+    target_groups = default_rule['Actions'][0].get('ForwardConfig', {}).get('TargetGroups', [])
+    
+    inactive_env = None
+    inactive_service = None
+    
+    for tg in target_groups:
+        if tg['TargetGroupArn'] == blue_tg_arn and tg.get('Weight', 0) == 0:
+            inactive_env = 'blue'
+            inactive_service = blue_service
+            break
+        elif tg['TargetGroupArn'] == green_tg_arn and tg.get('Weight', 0) == 0:
+            inactive_env = 'green'
+            inactive_service = green_service
+            break
+    
+    if not inactive_env:
+        print("No inactive environment found (both have non-zero weight). Skipping deployment.")
+        return {'statusCode': 200, 'body': json.dumps({'status': 'skipped', 'reason': 'no_inactive_env'})}
+    
+    print(f"Deploying to inactive environment: {inactive_env} (service: {inactive_service})")
+    
+    # Get current task definition for the inactive service
+    service_desc = ecs.describe_services(cluster=cluster_name, services=[inactive_service])
+    current_task_def_arn = service_desc['services'][0]['taskDefinition']
+    
+    # Get task definition details
+    task_def = ecs.describe_task_definition(taskDefinition=current_task_def_arn)['taskDefinition']
+    
+    # Update container image with new tag
+    new_image = f"{ecr_repo_url}:{image_tag}"
+    for container in task_def['containerDefinitions']:
+        if 'wordpress' in container['name'].lower() or container == task_def['containerDefinitions'][0]:
+            old_image = container['image']
+            container['image'] = new_image
+            print(f"Updating container '{container['name']}' image: {old_image} -> {new_image}")
+            break
+    
+    # Register new task definition (copy from existing, just change image)
+    new_task_def = ecs.register_task_definition(
+        family=task_def['family'],
+        taskRoleArn=task_def.get('taskRoleArn', ''),
+        executionRoleArn=task_def.get('executionRoleArn', ''),
+        networkMode=task_def.get('networkMode', 'awsvpc'),
+        containerDefinitions=task_def['containerDefinitions'],
+        volumes=task_def.get('volumes', []),
+        requiresCompatibilities=task_def.get('requiresCompatibilities', ['FARGATE']),
+        cpu=task_def.get('cpu', '256'),
+        memory=task_def.get('memory', '512')
+    )
+    
+    new_task_def_arn = new_task_def['taskDefinition']['taskDefinitionArn']
+    print(f"Registered new task definition: {new_task_def_arn}")
+    
+    # Update service to use new task definition
+    response = ecs.update_service(
+        cluster=cluster_name,
+        service=inactive_service,
+        taskDefinition=new_task_def_arn,
+        forceNewDeployment=True
+    )
+    
+    deployment_id = response['service']['deployments'][0]['id']
+    print(f"Successfully triggered deployment for {inactive_service}: {deployment_id}")
+    
+    # Invoke canary_deploy Lambda (next step in pipeline)
+    if canary_deploy_lambda_arn:
+        print(f"Invoking canary_deploy Lambda: {canary_deploy_lambda_arn}")
+        try:
+            # Pass inactive_env info to canary_deploy
+            canary_event = {
+                'inactive_env': inactive_env,
+                'image_tag': image_tag,
+                'deployment_id': deployment_id,
+                'original_event': event
+            }
+            lambda_client.invoke(
+                FunctionName=canary_deploy_lambda_arn,
+                InvocationType='Event',  # Async invoke
+                Payload=json.dumps(canary_event)
+            )
+            print("canary_deploy Lambda invoked successfully")
+        except Exception as e:
+            print(f"Error invoking canary_deploy Lambda: {e}")
     
     return {
         'statusCode': 200,
-        'body': json.dumps(results)
+        'body': json.dumps({
+            'status': 'success',
+            'environment': inactive_env,
+            'service': inactive_service,
+            'image_tag': image_tag,
+            'task_definition': new_task_def_arn,
+            'deployment_id': deployment_id,
+            'next_step': 'canary_deploy'
+        })
     }
 EOF
     filename = "index.py"
@@ -122,8 +277,14 @@ resource "aws_lambda_function" "ecs_deploy" {
 
   environment {
     variables = {
-      ECS_CLUSTER_NAME  = aws_ecs_cluster.main.name
-      ECS_SERVICE_NAMES = "${aws_ecs_service.blue.name},${aws_ecs_service.green.name}"
+      ECS_CLUSTER_NAME         = aws_ecs_cluster.main.name
+      BLUE_SERVICE_NAME        = aws_ecs_service.blue.name
+      GREEN_SERVICE_NAME       = aws_ecs_service.green.name
+      LISTENER_ARN             = aws_lb_listener.https.arn
+      BLUE_TG_ARN              = aws_lb_target_group.ecs.arn
+      GREEN_TG_ARN             = aws_lb_target_group.ecs_green.arn
+      ECR_REPO_URL             = aws_ecr_repository.wordpress.repository_url
+      CANARY_DEPLOY_LAMBDA_ARN = aws_lambda_function.canary_deploy.arn
     }
   }
 
@@ -166,21 +327,6 @@ resource "aws_cloudwatch_event_rule" "ecr_push" {
   }
 }
 
-resource "aws_cloudwatch_event_target" "ecr_push_lambda" {
-  rule      = aws_cloudwatch_event_rule.ecr_push.name
-  target_id = "ecs-deploy-lambda"
-  arn       = aws_lambda_function.ecs_deploy.arn
-}
-
-resource "aws_lambda_permission" "ecr_push" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.ecs_deploy.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
-}
-
-# Also trigger SQL Import Lambda on ECR push
 resource "aws_cloudwatch_event_target" "ecr_push_sql_import" {
   rule      = aws_cloudwatch_event_rule.ecr_push.name
   target_id = "sql-import-lambda"
@@ -195,35 +341,8 @@ resource "aws_lambda_permission" "ecr_push_sql_import" {
   source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
 }
 
-# Trigger Canary Deploy Lambda on ECR push
-resource "aws_cloudwatch_event_target" "ecr_push_canary_deploy" {
-  rule      = aws_cloudwatch_event_rule.ecr_push.name
-  target_id = "canary-deploy-lambda"
-  arn       = aws_lambda_function.canary_deploy.arn
-}
-
-resource "aws_lambda_permission" "ecr_push_canary_deploy" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.canary_deploy.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
-}
-
-# Trigger Synthetic Traffic Lambda on ECR push
-resource "aws_cloudwatch_event_target" "ecr_push_synthetic_traffic" {
-  rule      = aws_cloudwatch_event_rule.ecr_push.name
-  target_id = "synthetic-traffic-lambda"
-  arn       = aws_lambda_function.synthetic_traffic.arn
-}
-
-resource "aws_lambda_permission" "ecr_push_synthetic_traffic" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.synthetic_traffic.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.ecr_push.arn
-}
+# Note: ecs_deploy and canary_deploy are now invoked sequentially by sql_import and ecs_deploy respectively
+# Flow: ECR Push → sql_import → ecs_deploy → canary_deploy
 
 
 # -----------------------------------------------------------------------------
@@ -345,6 +464,13 @@ resource "aws_iam_role_policy" "sql_import_lambda" {
           "ec2:DeleteNetworkInterface"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = aws_lambda_function.ecs_deploy.arn
       }
     ]
   })
@@ -369,6 +495,7 @@ def handler(event, context):
     s3 = boto3.client('s3')
     elbv2 = boto3.client('elbv2')
     secrets = boto3.client('secretsmanager')
+    lambda_client = boto3.client('lambda')
     
     # Environment variables
     bucket_name = os.environ['SQL_BUCKET_NAME']
@@ -379,6 +506,7 @@ def handler(event, context):
     green_rds_host = os.environ['GREEN_RDS_HOST']
     db_name = os.environ['DB_NAME']
     secret_arn = os.environ['SECRET_ARN']
+    ecs_deploy_lambda_arn = os.environ.get('ECS_DEPLOY_LAMBDA_ARN', '')
     
     # 1. Get latest .sql file from S3
     print(f"Listing objects in bucket: {bucket_name}")
@@ -479,12 +607,26 @@ def handler(event, context):
         
         print(f"SQL import completed successfully to {inactive_env} environment")
         
+        # 6. Invoke ecs_deploy Lambda (next step in pipeline)
+        if ecs_deploy_lambda_arn:
+            print(f"Invoking ecs_deploy Lambda: {ecs_deploy_lambda_arn}")
+            try:
+                lambda_client.invoke(
+                    FunctionName=ecs_deploy_lambda_arn,
+                    InvocationType='Event',  # Async invoke
+                    Payload=json.dumps(event)
+                )
+                print("ecs_deploy Lambda invoked successfully")
+            except Exception as e:
+                print(f"Error invoking ecs_deploy Lambda: {e}")
+        
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'environment': inactive_env,
                 'file': latest_file['Key'],
-                'status': 'success'
+                'status': 'success',
+                'next_step': 'ecs_deploy'
             })
         }
     except Exception as e:
@@ -513,14 +655,15 @@ resource "aws_lambda_function" "sql_import" {
 
   environment {
     variables = {
-      SQL_BUCKET_NAME = aws_s3_bucket.sql_backup.id
-      LISTENER_ARN    = aws_lb_listener.https.arn
-      BLUE_TG_ARN     = aws_lb_target_group.ecs.arn
-      GREEN_TG_ARN    = aws_lb_target_group.ecs_green.arn
-      BLUE_RDS_HOST   = aws_db_instance.main.address
-      GREEN_RDS_HOST  = aws_db_instance.green.address
-      DB_NAME         = var.db_name
-      SECRET_ARN      = aws_secretsmanager_secret.wordpress_env.arn
+      SQL_BUCKET_NAME       = aws_s3_bucket.sql_backup.id
+      LISTENER_ARN          = aws_lb_listener.https.arn
+      BLUE_TG_ARN           = aws_lb_target_group.ecs.arn
+      GREEN_TG_ARN          = aws_lb_target_group.ecs_green.arn
+      BLUE_RDS_HOST         = aws_db_instance.main.address
+      GREEN_RDS_HOST        = aws_db_instance.green.address
+      DB_NAME               = var.db_name
+      SECRET_ARN            = aws_secretsmanager_secret.wordpress_env.arn
+      ECS_DEPLOY_LAMBDA_ARN = aws_lambda_function.ecs_deploy.arn
     }
   }
 
@@ -593,6 +736,13 @@ resource "aws_iam_role_policy" "canary_deploy_lambda" {
         Effect = "Allow"
         Action = [
           "cloudwatch:DescribeAlarms"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeTargetHealth"
         ]
         Resource = "*"
       },
@@ -732,6 +882,37 @@ def handler(event, context):
             print(f"Error checking alarms: {e}")
         return None
     
+    def check_target_health():
+        """Check Target Group health - only 'unhealthy' status triggers rollback"""
+        unhealthy_threshold = 0  # Trigger rollback if any unhealthy targets
+        
+        try:
+            response = elbv2.describe_target_health(TargetGroupArn=new_tg_arn)
+            targets = response.get('TargetHealthDescriptions', [])
+            
+            unhealthy_count = 0
+            other_states = {}
+            
+            for target in targets:
+                health_state = target.get('TargetHealth', {}).get('State', '')
+                if health_state == 'unhealthy':
+                    unhealthy_count += 1
+                else:
+                    # Count other states for logging only
+                    other_states[health_state] = other_states.get(health_state, 0) + 1
+            
+            total_count = len(targets)
+            print(f"Target health check - Total: {total_count}, Unhealthy: {unhealthy_count}, Others: {other_states}")
+            
+            # Only 'unhealthy' status triggers rollback
+            if unhealthy_count > unhealthy_threshold:
+                return f"Unhealthy targets detected: {unhealthy_count}/{total_count}"
+                
+        except Exception as e:
+            print(f"Error checking target health: {e}")
+        
+        return None
+    
     def invoke_synthetic_traffic():
         """Invoke synthetic traffic Lambda"""
         if not synthetic_lambda_arn:
@@ -769,7 +950,12 @@ def handler(event, context):
         if alarm_triggered:
             return rollback(f"CloudWatch alarm triggered: {alarm_triggered}")
         
-        print(f"Canary check at {elapsed}s - No alarms detected")
+        # Check target health
+        health_error = check_target_health()
+        if health_error:
+            return rollback(f"Target health check failed: {health_error}")
+        
+        print(f"Canary check at {elapsed}s - All checks passed")
     
     # Stage 2: Full deployment - 100% to new environment
     print(f"Stage 2: Full deployment - 100% to new environment ({inactive_env})")
@@ -790,6 +976,11 @@ def handler(event, context):
         alarm_triggered = check_alarms()
         if alarm_triggered:
             return rollback(f"CloudWatch alarm triggered during full deploy: {alarm_triggered}")
+        
+        # Check target health
+        health_error = check_target_health()
+        if health_error:
+            return rollback(f"Target health check failed during full deploy: {health_error}")
     
     print(f"Canary deployment completed successfully for {inactive_env}")
     
