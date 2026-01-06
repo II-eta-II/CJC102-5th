@@ -289,12 +289,16 @@ resource "aws_ecs_task_definition" "blue" {
         {
           name      = "WORDPRESS_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_password::"
+        },
+        {
+          name      = "CWA_API_TOKEN"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:cwa_api_token::"
         }
       ]
 
       healthCheck = {
         command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
-        interval    = 30
+        interval    = 10
         timeout     = 5
         retries     = 3
         startPeriod = 60
@@ -395,7 +399,6 @@ resource "aws_ecs_service" "blue" {
     aws_lb_listener.http,
     aws_lb_listener.https
   ]
-
 }
 
 # Application Auto Scaling Target
@@ -421,7 +424,7 @@ resource "aws_appautoscaling_policy" "blue_ecs_cpu" {
     }
     target_value       = 30.0
     scale_in_cooldown  = 60
-    scale_out_cooldown = 20
+    scale_out_cooldown = 5
   }
 }
 
@@ -437,9 +440,9 @@ resource "aws_appautoscaling_policy" "blue_ecs_memory" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageMemoryUtilization"
     }
-    target_value       = 80.0
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
+    target_value       = 30.0
+    scale_in_cooldown  = 60
+    scale_out_cooldown = 5
   }
 }
 
@@ -627,12 +630,16 @@ resource "aws_ecs_task_definition" "green" {
         {
           name      = "WORDPRESS_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:wordpress_password::"
+        },
+        {
+          name      = "CWA_API_TOKEN"
+          valueFrom = "${aws_secretsmanager_secret.wordpress_env.arn}:cwa_api_token::"
         }
       ]
 
       healthCheck = {
         command     = ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
-        interval    = 30
+        interval    = 10
         timeout     = 5
         retries     = 3
         startPeriod = 60
@@ -731,7 +738,6 @@ resource "aws_ecs_service" "green" {
     aws_lb_listener.http,
     aws_lb_listener.https
   ]
-
 }
 
 resource "aws_appautoscaling_target" "ecs_green" {

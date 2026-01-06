@@ -797,12 +797,33 @@ def handler(event, context):
     alarm_5xx_name = os.environ.get('ALARM_5XX_NAME', '')
     synthetic_lambda_arn = os.environ.get('SYNTHETIC_LAMBDA_ARN', '')
     
+    # Define invoke_synthetic_traffic early so it can be used in all stages
+    def invoke_synthetic_traffic():
+        """Invoke synthetic traffic Lambda"""
+        if not synthetic_lambda_arn:
+            print("No synthetic traffic Lambda configured")
+            return
+        
+        try:
+            print("Invoking synthetic traffic Lambda...")
+            lambda_client.invoke(
+                FunctionName=synthetic_lambda_arn,
+                InvocationType='Event'  # Async
+            )
+            print("Synthetic traffic Lambda invoked")
+        except Exception as e:
+            print(f"Error invoking synthetic traffic: {e}")
+    
     if not canary_enabled:
         print("Canary deployment is disabled. Skipping.")
         return {'statusCode': 200, 'body': json.dumps({'status': 'skipped', 'reason': 'disabled'})}
     
     # Stage 0: Pre-deploy wait - wait for new deployment to be ready
     print(f"Stage 0: Waiting {pre_deploy_wait} seconds for new deployment to be ready...")
+    
+    # Start synthetic traffic early to ensure we have requests during the entire deployment
+    invoke_synthetic_traffic()
+    
     time.sleep(pre_deploy_wait)
     
     # Get inactive environment from event or detect from ALB
@@ -912,22 +933,6 @@ def handler(event, context):
             print(f"Error checking target health: {e}")
         
         return None
-    
-    def invoke_synthetic_traffic():
-        """Invoke synthetic traffic Lambda"""
-        if not synthetic_lambda_arn:
-            print("No synthetic traffic Lambda configured")
-            return
-        
-        try:
-            print("Invoking synthetic traffic Lambda...")
-            lambda_client.invoke(
-                FunctionName=synthetic_lambda_arn,
-                InvocationType='Event'  # Async
-            )
-            print("Synthetic traffic Lambda invoked")
-        except Exception as e:
-            print(f"Error invoking synthetic traffic: {e}")
     
     # Stage 1: Canary - small percentage to new environment
     print(f"Stage 1: Canary - {canary_pct}% to new environment ({inactive_env})")
@@ -1113,101 +1118,102 @@ def handler(event, context):
     
     # Environment variables
     target_url = os.environ.get('TARGET_URL', '')
-    min_requests = int(os.environ.get('MIN_REQUESTS', '100'))
-    concurrent_requests = int(os.environ.get('CONCURRENT_REQUESTS', '10'))
-    request_interval_ms = int(os.environ.get('REQUEST_INTERVAL_MS', '100'))
+    requests_per_second = int(os.environ.get('REQUESTS_PER_SECOND', '2'))
     pre_deploy_wait = int(os.environ.get('PRE_DEPLOY_WAIT_SEC', '120'))
+    canary_duration = int(os.environ.get('CANARY_DURATION_SEC', '300'))
+    full_deploy_wait = int(os.environ.get('FULL_DEPLOY_WAIT_SEC', '60'))
     
     # Override from event if provided
     target_url = event.get('target_url', target_url)
-    min_requests = event.get('min_requests', min_requests)
     
     if not target_url:
         return {'statusCode': 400, 'body': json.dumps({'error': 'TARGET_URL not configured'})}
     
-    # Stage 0: Pre-deploy wait - same as canary
-    print(f"Stage 0: Waiting {pre_deploy_wait} seconds for new deployment to be ready...")
-    time.sleep(pre_deploy_wait)
+    # Calculate total duration: pre_deploy + canary + full_deploy
+    total_duration = pre_deploy_wait + canary_duration + full_deploy_wait
     
-    print(f"Starting synthetic traffic test")
+    print(f"Starting CONTINUOUS synthetic traffic")
     print(f"Target URL: {target_url}")
-    print(f"Minimum requests: {min_requests}")
-    print(f"Concurrent requests: {concurrent_requests}")
+    print(f"Requests per second: {requests_per_second}")
+    print(f"Total duration: {total_duration} seconds")
+    print(f"  - Pre-deploy wait: {pre_deploy_wait}s")
+    print(f"  - Canary duration: {canary_duration}s")
+    print(f"  - Full deploy wait: {full_deploy_wait}s")
     
     success_count = 0
     error_4xx = 0
     error_5xx = 0
     other_errors = 0
+    start_time = time.time()
     
-    def make_request(i):
+    def make_request():
         try:
             req = urllib.request.Request(target_url, headers={'User-Agent': 'SyntheticTrafficLambda/1.0'})
             with urllib.request.urlopen(req, timeout=30) as response:
-                status = response.getcode()
-                return ('success', status)
+                return ('success', response.getcode())
         except urllib.error.HTTPError as e:
             return ('http_error', e.code)
         except Exception as e:
             return ('error', str(e))
     
-    # Send requests in batches
-    batch_size = concurrent_requests
-    total_batches = (min_requests + batch_size - 1) // batch_size
+    # Send requests continuously until total_duration is reached
+    request_interval = 1.0 / requests_per_second
+    last_log_time = start_time
     
-    for batch in range(total_batches):
-        start_idx = batch * batch_size
-        end_idx = min(start_idx + batch_size, min_requests)
+    while True:
+        elapsed = time.time() - start_time
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=concurrent_requests) as executor:
-            futures = [executor.submit(make_request, i) for i in range(start_idx, end_idx)]
-            
-            for future in concurrent.futures.as_completed(futures):
-                result_type, result_value = future.result()
-                if result_type == 'success':
-                    success_count += 1
-                elif result_type == 'http_error':
-                    if 400 <= result_value < 500:
-                        error_4xx += 1
-                    elif 500 <= result_value < 600:
-                        error_5xx += 1
-                else:
-                    other_errors += 1
+        # Check if we've reached the total duration
+        if elapsed >= total_duration:
+            break
         
-        # Small delay between batches
-        time.sleep(request_interval_ms / 1000)
+        # Check if Lambda is about to timeout (leave 10s buffer)
+        remaining_time = context.get_remaining_time_in_millis() / 1000
+        if remaining_time < 10:
+            print(f"Lambda timeout approaching, stopping early at {elapsed:.0f}s")
+            break
         
-        # Log progress
-        if (batch + 1) % 10 == 0:
-            print(f"Progress: {end_idx}/{min_requests} requests completed")
+        # Make request
+        result_type, result_value = make_request()
+        if result_type == 'success':
+            success_count += 1
+        elif result_type == 'http_error':
+            if 400 <= result_value < 500:
+                error_4xx += 1
+            elif 500 <= result_value < 600:
+                error_5xx += 1
+        else:
+            other_errors += 1
+        
+        # Log progress every 30 seconds
+        if time.time() - last_log_time >= 30:
+            total_requests = success_count + error_4xx + error_5xx + other_errors
+            print(f"Progress at {elapsed:.0f}s: {total_requests} requests, {success_count} success, {error_5xx} 5xx errors")
+            last_log_time = time.time()
+        
+        # Wait for next request
+        time.sleep(request_interval)
     
     total_requests = success_count + error_4xx + error_5xx + other_errors
+    duration = time.time() - start_time
     
     result = {
         'statusCode': 200,
         'body': json.dumps({
             'status': 'completed',
             'target_url': target_url,
+            'duration_seconds': round(duration, 2),
             'total_requests': total_requests,
             'success_count': success_count,
             'error_4xx': error_4xx,
             'error_5xx': error_5xx,
             'other_errors': other_errors,
+            'requests_per_second': round(total_requests / duration, 2) if duration > 0 else 0,
             'success_rate': f"{(success_count / total_requests * 100):.2f}%" if total_requests > 0 else "N/A"
         })
     }
     
-    print(f"Result: {json.dumps(result['body'])}")
-    
-    # Return error if too many 5xx errors
-    if error_5xx > min_requests * 0.1:  # More than 10% 5xx errors
-        result['statusCode'] = 500
-        result['body'] = json.dumps({
-            'status': 'error',
-            'reason': 'Too many 5xx errors detected',
-            'error_5xx': error_5xx,
-            'threshold': min_requests * 0.1
-        })
-    
+    print(f"Final Result: {result['body']}")
     return result
 EOF
     filename = "index.py"
@@ -1221,16 +1227,16 @@ resource "aws_lambda_function" "synthetic_traffic" {
   handler          = "index.handler"
   source_code_hash = data.archive_file.synthetic_traffic_lambda.output_base64sha256
   runtime          = "python3.11"
-  timeout          = 300 # 5 minutes
+  timeout          = 900 # 15 minutes (maximum) for continuous traffic during deployment
   memory_size      = 256
 
   environment {
     variables = {
-      TARGET_URL          = "https://${var.subdomain}.${var.route53_domain_name}/"
-      MIN_REQUESTS        = "100" # 2x of 50 (4xx threshold)
-      CONCURRENT_REQUESTS = "10"
-      REQUEST_INTERVAL_MS = "100"
-      PRE_DEPLOY_WAIT_SEC = tostring(var.pre_deploy_wait_sec)
+      TARGET_URL           = "https://${var.subdomain}.${var.route53_domain_name}/"
+      REQUESTS_PER_SECOND  = "2"
+      PRE_DEPLOY_WAIT_SEC  = tostring(var.pre_deploy_wait_sec)
+      CANARY_DURATION_SEC  = tostring(var.canary_duration_sec)
+      FULL_DEPLOY_WAIT_SEC = tostring(var.full_deploy_wait_sec)
     }
   }
 
