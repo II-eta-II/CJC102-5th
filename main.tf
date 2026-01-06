@@ -55,23 +55,6 @@ provider "aws" {
   }
 }
 
-# Provider for WAF (必須在 us-east-1，因為 CloudFront 的 WAF 只能在 us-east-1 創建)
-provider "aws" {
-  alias   = "us_east_1"
-  region  = "us-east-1"
-  profile = var.aws_profile != "" ? var.aws_profile : null
-
-  default_tags {
-    tags = merge(
-      {
-        ManagedBy = "Terraform"
-        Project   = var.project_name
-      },
-      var.extra_tags
-    )
-  }
-}
-
 # Provider for Route53 (使用跨帳戶授權的 role 來管理 Route53 記錄)
 # 此 role 由其他帳戶授權，允許對 hosted zone 進行新增和修改
 provider "aws" {
@@ -102,9 +85,8 @@ module "wordpress" {
 
   # Pass provider aliases
   providers = {
-    aws           = aws
-    aws.us_east_1 = aws.us_east_1
-    aws.route53   = aws.route53
+    aws         = aws
+    aws.route53 = aws.route53
   }
 
   # Core Configuration
@@ -135,8 +117,9 @@ module "wordpress" {
   db_allocated_storage = var.db_allocated_storage
 
   # WordPress Configuration
-  wp_username = var.wp_username
-  wp_password = var.wp_password
+  wp_username   = var.wp_username
+  wp_password   = var.wp_password
+  cwa_api_token = var.cwa_api_token
 
   # Route53 Configuration
   route53_zone_id     = var.route53_zone_id

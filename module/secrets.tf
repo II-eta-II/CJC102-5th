@@ -20,6 +20,7 @@ resource "aws_secretsmanager_secret_version" "wordpress_env" {
     wordpress_password = var.wp_password
     db_username        = var.db_username
     db_password        = var.db_password
+    cwa_api_token      = var.cwa_api_token
   })
 
   lifecycle {

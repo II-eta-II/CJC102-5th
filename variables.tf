@@ -142,48 +142,11 @@ variable "wp_password" {
   sensitive   = true
 }
 
-# CloudFront Configuration
-variable "cloudfront_price_class" {
-  description = "Price class for CloudFront distribution (PriceClass_100, PriceClass_200, PriceClass_All)"
+variable "cwa_api_token" {
+  description = "CWA API Token for external service integration"
   type        = string
-  default     = "PriceClass_All"
-}
-
-variable "cloudfront_default_ttl" {
-  description = "Default TTL for CloudFront cache in seconds"
-  type        = number
-  default     = 86400 # 24 hours
-}
-
-variable "cloudfront_max_ttl" {
-  description = "Maximum TTL for CloudFront cache in seconds"
-  type        = number
-  default     = 31536000 # 1 year
-}
-
-variable "cloudfront_static_ttl" {
-  description = "TTL for static assets in CloudFront cache in seconds"
-  type        = number
-  default     = 31536000 # 1 year
-}
-
-variable "cloudfront_log_retention_days" {
-  description = "Number of days to retain CloudFront logs in S3"
-  type        = number
-  default     = 30
-}
-
-# WAF Configuration
-variable "waf_rate_limit" {
-  description = "Rate limit for WAF (requests per 5 minutes per IP)"
-  type        = number
-  default     = 2000
-}
-
-variable "waf_log_retention_days" {
-  description = "Number of days to retain WAF logs in CloudWatch"
-  type        = number
-  default     = 30
+  sensitive   = true
+  default     = ""
 }
 
 # Route53 Configuration

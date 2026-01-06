@@ -1,13 +1,13 @@
 # WordPress on AWS ECS Fargate
 
-使用 Terraform 在 AWS 上部署 WordPress，包含 ECS Fargate、RDS、EFS、CloudFront、WAF 等完整架構。
+使用 Terraform 在 AWS 上部署 WordPress，包含 ECS Fargate、RDS、EFS、藍綠部署等完整架構。
 
 ## 架構圖
 
 ```
-User → CloudFront (HTTPS) → ALB → ECS Fargate → RDS MySQL
-                                      ↓
-                                     EFS (wp-content)
+User → ALB (HTTPS) → ECS Fargate (Blue/Green) → RDS MySQL (Blue/Green)
+                           ↓
+                          EFS (wp-content)
 ```
 
 ## 功能特色
@@ -15,10 +15,9 @@ User → CloudFront (HTTPS) → ALB → ECS Fargate → RDS MySQL
 - **ECS Fargate** - 無伺服器容器運算
 - **RDS MySQL** - 託管資料庫
 - **EFS** - 共享檔案儲存 (wp-content)
-- **CloudFront** - CDN 加速 + HTTPS
-- **WAF** - Web 應用程式防火牆
 - **ACM** - 自動 SSL 憑證
 - **Auto Scaling** - 自動擴展
+- **Blue-Green Deployment** - 自動藍綠部署
 
 ## 快速開始
 
@@ -69,34 +68,43 @@ terraform apply
 ### 5. 存取
 
 部署完成後，可透過以下方式存取：
-- **CloudFront URL**: `https://your-subdomain.cjc102.site`
+- **HTTPS URL**: `https://your-subdomain.cjc102.site`
 - **ALB URL**: 從 `terraform output alb_url` 取得
 
 ## 目錄結構
 
 ```
 .
-├── main.tf                 # 主要設定 (provider, module)
-├── variables.tf            # 變數定義
-├── outputs.tf              # 輸出值
-├── terraform.tfvars        # 變數值 (不納入版控)
-├── secret.auto.tfvars      # 機密變數 (不納入版控)
-├── *.tfvars.sample         # 範例設定檔
-├── module/                 # 基礎設施模組
-│   ├── vpc.tf              # VPC, Subnets, NAT
-│   ├── ecs.tf              # ECS Cluster, Service, Task
-│   ├── ec2.tf              # ALB, Target Group
-│   ├── rds.tf              # RDS MySQL
-│   ├── efs.tf              # EFS 檔案系統
-│   ├── s3.tf               # S3 靜態資源
-│   ├── cloudfront.tf       # CloudFront CDN
-│   ├── waf.tf              # WAF 防火牆
-│   ├── route53.tf          # DNS, ACM 憑證
-│   └── ...
-└── .aws/                   # AWS CLI 腳本
-    ├── route53-add-cname.ps1
-    ├── list-route53-record.ps1
-    └── teammate/           # 跨帳號設定
+├── main.tf                    # 主要設定 (provider, module)
+├── variables.tf               # 變數定義
+├── outputs.tf                 # 輸出值
+├── bluegreen.auto.tfvars      # 藍綠部署設定
+├── ops.tfvars                 # 生產環境設定
+├── secret.auto.tfvars         # 機密變數 (不納入版控)
+├── *.tfvars.sample            # 範例設定檔
+│
+├── module/                    # 基礎設施模組
+│   ├── vpc.tf                 # VPC, Subnets, NAT Gateway
+│   ├── ecs.tf                 # ECS Cluster, Service, Task (Blue/Green)
+│   ├── ec2.tf                 # ALB, Target Group, CloudWatch Alarms
+│   ├── rds.tf                 # RDS MySQL (Blue/Green)
+│   ├── efs.tf                 # EFS 檔案系統
+│   ├── s3.tf                  # S3 媒體儲存 + SQL 備份
+│   ├── ecr.tf                 # ECR 容器 Registry
+│   ├── pipeline.tf            # CI/CD Lambda (ecs_deploy, canary_deploy, sql_import)
+│   ├── secrets.tf             # Secrets Manager
+│   ├── route53.tf             # DNS, ACM 憑證
+│   └── lambda/                # Lambda 程式碼打包
+│
+├── docs/                      # 文件
+│   ├── cicd-auto-deployment.md
+│   ├── connect-rds.md
+│   ├── copy-s3-to-efs.md
+│   ├── header-based-routing.md
+│   └── push-image-to-ecr.md
+│
+└── .aws/                      # AWS CLI 腳本
+    └── teammate/              # 跨帳號設定
 ```
 
 ## Route53 跨帳號設定
@@ -128,7 +136,6 @@ terraform destroy
 ## 注意事項
 
 - 首次部署需等待約 5-10 分鐘讓 ACM 憑證驗證完成
-- CloudFront 更新需要約 5-15 分鐘生效
 - `*.tfvars` 檔案包含機密資料，請勿提交至版控
 
 ## 預估成本
@@ -136,12 +143,11 @@ terraform destroy
 | 服務 | 預估月費 (USD) |
 |------|----------------|
 | ECS Fargate | ~$15-30 |
-| RDS db.t3.micro | ~$15 |
+| RDS db.t3.micro x2 | ~$30 |
 | ALB | ~$16 |
 | EFS | ~$0.30/GB |
-| CloudFront | 依流量計費 |
 | NAT Gateway | ~$32 |
-| **合計** | **~$80-100+** |
+| **合計** | **~$95-110+** |
 
 > 💡 開發環境可考慮使用 `terraform destroy` 關閉資源以節省成本
 

@@ -136,6 +136,13 @@ variable "wp_password" {
   sensitive   = true
 }
 
+variable "cwa_api_token" {
+  description = "CWA API Token for external service integration"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # Route53 Configuration
 variable "route53_zone_id" {
   description = "Route53 Hosted Zone ID for ACM certificate DNS validation"

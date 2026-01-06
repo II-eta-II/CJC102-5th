@@ -65,9 +65,9 @@ resource "aws_lb_target_group" "ecs" {
   health_check {
     enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 20
-    interval            = 60
+    unhealthy_threshold = 2
+    timeout             = 10
+    interval            = 15
     path                = "/"
     protocol            = "HTTP"
     matcher             = "200-399"
@@ -85,7 +85,7 @@ resource "aws_lb_target_group" "ecs" {
   }
 }
 
-# ALB Listener - HTTP (with weighted routing for Blue-Green, used by CloudFront)
+# ALB Listener - HTTP (redirects to HTTPS)
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -233,9 +233,9 @@ resource "aws_lb_target_group" "ecs_green" {
   health_check {
     enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 20
-    interval            = 60
+    unhealthy_threshold = 2
+    timeout             = 10
+    interval            = 15
     path                = "/"
     protocol            = "HTTP"
     matcher             = "200-399"
@@ -328,6 +328,54 @@ resource "aws_cloudwatch_metric_alarm" "alb_elb_5xx_errors" {
   }
 }
 
+# CloudWatch Alarm - Blue Target Group Unhealthy Hosts
+resource "aws_cloudwatch_metric_alarm" "blue_unhealthy_hosts" {
+  alarm_name          = "${var.project_name}-blue-unhealthy-hosts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  alarm_description   = "Blue environment has unhealthy targets"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    TargetGroup  = aws_lb_target_group.ecs.arn_suffix
+    LoadBalancer = local.alb_arn_suffix
+  }
+
+  tags = {
+    Name        = "${var.project_name}-blue-unhealthy-hosts-alarm"
+    Environment = "blue"
+  }
+}
+
+# CloudWatch Alarm - Green Target Group Unhealthy Hosts
+resource "aws_cloudwatch_metric_alarm" "green_unhealthy_hosts" {
+  alarm_name          = "${var.project_name}-green-unhealthy-hosts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  alarm_description   = "Green environment has unhealthy targets"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    TargetGroup  = aws_lb_target_group.ecs_green.arn_suffix
+    LoadBalancer = local.alb_arn_suffix
+  }
+
+  tags = {
+    Name        = "${var.project_name}-green-unhealthy-hosts-alarm"
+    Environment = "green"
+  }
+}
+
 # CloudWatch Dashboard for HTTP Errors Overview
 resource "aws_cloudwatch_dashboard" "http_errors" {
   dashboard_name = "${var.project_name}-http-errors"
@@ -403,3 +451,154 @@ resource "aws_cloudwatch_dashboard" "http_errors" {
   })
 }
 
+# CloudWatch Dashboard for Blue-Green Deployment Monitoring
+resource "aws_cloudwatch_dashboard" "bluegreen" {
+  dashboard_name = "${var.project_name}-bluegreen"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      # Single chart with 4 data series: Blue/Green Traffic % + Blue/Green Unhealthy Count
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 10
+        properties = {
+          title    = "Blue-Green Deployment Overview"
+          view     = "timeSeries"
+          stacked  = false
+          region   = var.aws_region
+          liveData = true
+          metrics = [
+            # Blue Traffic % (Left Y-axis, 0-100%) - Blue color
+            [{ expression = "100 * blue_req / (blue_req + green_req)", label = "Blue Traffic %", color = "#1f77b4", yAxis = "left" }],
+            # Green Traffic % (Left Y-axis, 0-100%) - Green color
+            [{ expression = "100 * green_req / (blue_req + green_req)", label = "Green Traffic %", color = "#2ca02c", yAxis = "left" }],
+            # Blue Unhealthy Count (Right Y-axis) - Orange
+            ["AWS/ApplicationELB", "UnHealthyHostCount", "TargetGroup", aws_lb_target_group.ecs.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Maximum", period = 60, label = "Blue Unhealthy", color = "#ff7f0e", yAxis = "right", id = "blue_unhealthy" }],
+            # Green Unhealthy Count (Right Y-axis) - Red
+            ["AWS/ApplicationELB", "UnHealthyHostCount", "TargetGroup", aws_lb_target_group.ecs_green.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Maximum", period = 60, label = "Green Unhealthy", color = "#d62728", yAxis = "right", id = "green_unhealthy" }],
+            # Hidden metrics for calculation
+            ["AWS/ApplicationELB", "RequestCount", "TargetGroup", aws_lb_target_group.ecs.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60, id = "blue_req", visible = false }],
+            ["AWS/ApplicationELB", "RequestCount", "TargetGroup", aws_lb_target_group.ecs_green.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60, id = "green_req", visible = false }]
+          ]
+          yAxis = {
+            left = {
+              min   = 0
+              max   = 100
+              label = "Traffic %"
+            }
+            right = {
+              min   = 0
+              label = "Unhealthy Count"
+            }
+          }
+          legend = {
+            position = "bottom"
+          }
+          period = 60
+        }
+      },
+      # Stacked Area Chart - Blue/Green Traffic Distribution
+      {
+        type   = "metric"
+        x      = 0
+        y      = 10
+        width  = 24
+        height = 8
+        properties = {
+          title    = "Blue vs Green - Traffic (Stacked Area)"
+          view     = "timeSeries"
+          stacked  = true
+          region   = var.aws_region
+          liveData = true
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", "TargetGroup", aws_lb_target_group.ecs.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60, label = "Blue Traffic", color = "#1f77b4" }],
+            ["AWS/ApplicationELB", "RequestCount", "TargetGroup", aws_lb_target_group.ecs_green.arn_suffix, "LoadBalancer", local.alb_arn_suffix, { stat = "Sum", period = 60, label = "Green Traffic", color = "#2ca02c" }]
+          ]
+          yAxis = {
+            left = {
+              min   = 0
+              label = "Requests"
+            }
+          }
+          legend = {
+            position = "bottom"
+          }
+          period = 60
+        }
+      }
+    ]
+  })
+}
+
+# CloudWatch Dashboard for ECS Performance Monitoring
+resource "aws_cloudwatch_dashboard" "ecs_performance" {
+  dashboard_name = "${var.project_name}-ecs-performance"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      # Blue Environment - All metrics combined
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 10
+        properties = {
+          title    = "Blue Environment - Performance"
+          view     = "timeSeries"
+          stacked  = false
+          region   = var.aws_region
+          liveData = true
+          metrics = [
+            # Task Count (Left Y-axis)
+            ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.blue.name, { stat = "Average", period = 60, label = "Running Tasks", color = "#1f77b4", yAxis = "left" }],
+            # CPU % (Right Y-axis)
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.blue.name, { stat = "Average", period = 60, label = "CPU %", color = "#ff7f0e", yAxis = "right" }],
+            # Memory % (Right Y-axis)
+            ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.blue.name, { stat = "Average", period = 60, label = "Memory %", color = "#9467bd", yAxis = "right" }]
+          ]
+          yAxis = {
+            left  = { min = 0, label = "Tasks" }
+            right = { min = 0, max = 100, label = "Utilization %" }
+          }
+          legend = {
+            position = "bottom"
+          }
+        }
+      },
+      # Green Environment - All metrics combined
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 10
+        properties = {
+          title    = "Green Environment - Performance"
+          view     = "timeSeries"
+          stacked  = false
+          region   = var.aws_region
+          liveData = true
+          metrics = [
+            # Task Count (Left Y-axis)
+            ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.green.name, { stat = "Average", period = 60, label = "Running Tasks", color = "#2ca02c", yAxis = "left" }],
+            # CPU % (Right Y-axis)
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.green.name, { stat = "Average", period = 60, label = "CPU %", color = "#ff7f0e", yAxis = "right" }],
+            # Memory % (Right Y-axis)
+            ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.green.name, { stat = "Average", period = 60, label = "Memory %", color = "#9467bd", yAxis = "right" }]
+          ]
+          yAxis = {
+            left  = { min = 0, label = "Tasks" }
+            right = { min = 0, max = 100, label = "Utilization %" }
+          }
+          legend = {
+            position = "bottom"
+          }
+        }
+      }
+    ]
+  })
+}
